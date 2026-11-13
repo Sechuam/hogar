@@ -13,6 +13,7 @@ import com.hogar.household.repository.InvitationRepository;
 import com.hogar.household.repository.MembershipRepository;
 import com.hogar.shared.error.BusinessRuleException;
 import com.hogar.shared.error.ConflictException;
+import com.hogar.shared.error.ForbiddenException;
 import com.hogar.shared.error.NotFoundException;
 import java.time.Clock;
 import java.time.Duration;
@@ -28,6 +29,7 @@ public class InvitationService {
 
     static final String INVITATION_NOT_FOUND = "invitation-not-found";
     static final String ALREADY_MEMBER = "already-member";
+    static final String REMOVED_FROM_HOUSEHOLD = "removed-from-household";
     static final String INVITATION_EXPIRED = "invitation-expired";
     static final String INVITATION_EXHAUSTED = "invitation-exhausted";
     /** Intentos de generar un código libre antes de rendirse (con 2^50 códigos, colisionar dos veces es irreal). */
@@ -109,6 +111,11 @@ public class InvitationService {
         }
         if (memberships.existsActive(householdId, userId)) {
             throw new ConflictException(ALREADY_MEMBER, "Ya eres miembro de este hogar.");
+        }
+        if (memberships.wasRemovedAfter(householdId, userId, invitation.getCreatedAt())) {
+            // Expulsado después de crearse esta invitación: no puede usarla para volver (D-028).
+            throw new ForbiddenException(REMOVED_FROM_HOUSEHOLD,
+                    "Fuiste expulsado de este hogar después de crearse esta invitación. Pide una nueva al OWNER.");
         }
         Instant now = Instant.now(clock);
         if (invitation.isExpired(now)) {

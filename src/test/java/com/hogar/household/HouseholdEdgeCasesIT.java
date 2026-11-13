@@ -16,7 +16,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -50,7 +49,7 @@ class HouseholdEdgeCasesIT extends HouseholdApiSupport {
 
         ResponseEntity<String> response = raw(HttpMethod.PATCH, householdPath(id), ana, body);
 
-        assertProblem(response, HttpStatus.BAD_REQUEST, "bad-request");
+        assertBadBody(response);
         assertThat(read(get(householdPath(id), ana), HouseholdResponse.class).name()).isEqualTo("Piso");
     }
 
@@ -61,8 +60,7 @@ class HouseholdEdgeCasesIT extends HouseholdApiSupport {
             "{\"name\":\"Piso\",\"splitPolicy\":{}}",
             "{nombre:'Piso'}"})
     void createHouseholdWithMalformedBodyIsBadRequest(String body) {
-        assertProblem(raw(HttpMethod.POST, "/api/households", users().create("Ana"), body),
-                HttpStatus.BAD_REQUEST, "bad-request");
+        assertBadBody(raw(HttpMethod.POST, "/api/households", users().create("Ana"), body));
     }
 
     @ParameterizedTest
@@ -77,14 +75,11 @@ class HouseholdEdgeCasesIT extends HouseholdApiSupport {
         UUID id = createHousehold(ana, "Piso").id();
         join(ana, id, luis);
 
-        assertProblem(raw(HttpMethod.PATCH, memberPath(id, luis.id()), ana, body), HttpStatus.BAD_REQUEST,
-                "bad-request");
+        assertBadBody(raw(HttpMethod.PATCH, memberPath(id, luis.id()), ana, body));
         assertThat(members(ana, id)).extracting(MemberResponse::role)
                 .containsExactly(HouseholdRole.OWNER, HouseholdRole.MEMBER);
     }
 
-    @Disabled("BUG: Jackson acepta enums por ordinal: {\"role\":0} promociona a OWNER y {\"splitPolicy\":1} "
-            + "pone PROPORTIONAL. Fix: spring.jackson.deserialization.fail-on-numbers-for-enums=true en application.yml")
     @Test
     void numericEnumOrdinalsAreRejected() {
         TestUser ana = users().create("Ana");
@@ -92,10 +87,13 @@ class HouseholdEdgeCasesIT extends HouseholdApiSupport {
         UUID id = createHousehold(ana, "Piso").id();
         join(ana, id, luis);
 
-        assertProblem(raw(HttpMethod.PATCH, memberPath(id, luis.id()), ana, "{\"role\":0}"),
-                HttpStatus.BAD_REQUEST, "bad-request");
+        ResponseEntity<String> role = raw(HttpMethod.PATCH, memberPath(id, luis.id()), ana, "{\"role\":0}");
+        assertProblem(role, HttpStatus.BAD_REQUEST, "validation-error");
+        assertThat(tree(role).path("errors").get(0).path("field").asText()).isEqualTo("role");
         assertProblem(raw(HttpMethod.PATCH, householdPath(id), ana, "{\"splitPolicy\":1}"),
-                HttpStatus.BAD_REQUEST, "bad-request");
+                HttpStatus.BAD_REQUEST, "validation-error");
+        assertThat(members(ana, id)).extracting(MemberResponse::role)
+                .containsExactly(HouseholdRole.OWNER, HouseholdRole.MEMBER);
     }
 
     @ParameterizedTest
@@ -108,7 +106,7 @@ class HouseholdEdgeCasesIT extends HouseholdApiSupport {
         TestUser ana = users().create("Ana");
         UUID id = createHousehold(ana, "Piso").id();
 
-        assertProblem(raw(HttpMethod.POST, invitationsPath(id), ana, body), HttpStatus.BAD_REQUEST, "bad-request");
+        assertBadBody(raw(HttpMethod.POST, invitationsPath(id), ana, body));
         assertThat(read(get(invitationsPath(id), ana), InvitationResponse[].class)).isEmpty();
     }
 
@@ -191,10 +189,6 @@ class HouseholdEdgeCasesIT extends HouseholdApiSupport {
                 HttpStatus.NOT_FOUND, "member-not-found");
     }
 
-    @Disabled("BUG (diseño, media): un expulsado vuelve a entrar con la misma invitación ilimitada que ya usó "
-            + "(vive 7 días por defecto). Fix: al expulsar, rechazar en InvitationService.accept las invitaciones "
-            + "creadas antes de la expulsión para ese usuario (requiere distinguir expulsión de abandono en "
-            + "memberships, p. ej. columna removed_by), o revocar las invitaciones vivas al expulsar")
     @Test
     void expelledUserCannotRejoinWithTheInvitationHeAlreadyUsed() {
         TestUser ana = users().create("Ana");
@@ -204,8 +198,24 @@ class HouseholdEdgeCasesIT extends HouseholdApiSupport {
         assertThat(accept(luis, invitation.code()).getStatusCode()).isEqualTo(HttpStatus.OK);
         call(HttpMethod.DELETE, memberPath(id, luis.id()), ana, null);
 
-        assertThat(accept(luis, invitation.code()).getStatusCode()).isNotEqualTo(HttpStatus.OK);
+        assertProblem(accept(luis, invitation.code()), HttpStatus.FORBIDDEN, "removed-from-household");
         assertThat(members(ana, id)).extracting(MemberResponse::userId).containsExactly(ana.id());
+
+        // Si el OWNER le vuelve a invitar después de expulsarle, es una decisión explícita: sí entra.
+        InvitationResponse fresh = invite(ana, id, null, null);
+        assertThat(accept(luis, fresh.code()).getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
+    @Test
+    void userWhoLeftVoluntarilyCanRejoinWithTheSameInvitation() {
+        TestUser ana = users().create("Ana");
+        TestUser luis = users().create("Luis");
+        UUID id = createHousehold(ana, "Piso").id();
+        InvitationResponse invitation = invite(ana, id, null, null);
+        assertThat(accept(luis, invitation.code()).getStatusCode()).isEqualTo(HttpStatus.OK);
+        call(HttpMethod.POST, "/api/households/" + id + "/leave", luis, null);
+
+        assertThat(accept(luis, invitation.code()).getStatusCode()).isEqualTo(HttpStatus.OK);
     }
 
     // ---------------------------------------------------------------- concurrencia

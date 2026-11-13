@@ -60,6 +60,7 @@ public class MemberService {
     /** Cambia el rol de un miembro (también el propio). Solo OWNER. */
     @Transactional
     public MemberResponse changeRole(UUID householdId, UUID actorId, UUID targetUserId, HouseholdRole newRole) {
+        guard.requireOwner(householdId, actorId);
         lockHousehold(householdId);
         guard.requireOwner(householdId, actorId);
         Membership target = activeMember(householdId, targetUserId);
@@ -74,6 +75,7 @@ public class MemberService {
     /** Expulsa a otro miembro. Solo OWNER; para salir uno mismo está {@link #leave}. */
     @Transactional
     public void remove(UUID householdId, UUID actorId, UUID targetUserId) {
+        guard.requireOwner(householdId, actorId);
         lockHousehold(householdId);
         guard.requireOwner(householdId, actorId);
         if (actorId.equals(targetUserId)) {
@@ -81,7 +83,7 @@ public class MemberService {
                     "Para salir del hogar usa POST /api/households/{id}/leave.");
         }
         // El que expulsa es OWNER y sigue en el hogar: la expulsión nunca deja el hogar sin OWNER.
-        activeMember(householdId, targetUserId).leave(Instant.now(clock));
+        activeMember(householdId, targetUserId).removeBy(actorId, Instant.now(clock));
     }
 
     /**
@@ -90,6 +92,7 @@ public class MemberService {
      */
     @Transactional
     public void leave(UUID householdId, UUID userId) {
+        guard.requireMember(householdId, userId);
         lockHousehold(householdId);
         Membership me = guard.activeMembership(householdId, userId);
         if (me.isOwner()
@@ -100,6 +103,11 @@ public class MemberService {
         me.leave(Instant.now(clock));
     }
 
+    /**
+     * Bloquea la fila del hogar. Se llama siempre <b>después</b> de comprobar la membresía sin
+     * bloqueo (para que un extraño no pueda bloquear hogares ajenos) y la comprobación se repite
+     * ya con el bloqueo, porque el estado pudo cambiar entre medias.
+     */
     private void lockHousehold(UUID householdId) {
         households.findByIdForUpdate(householdId).orElseThrow(HouseholdMembershipGuard::householdNotFound);
     }

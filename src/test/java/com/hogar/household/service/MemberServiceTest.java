@@ -1,5 +1,8 @@
 package com.hogar.household.service;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.never;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyCollection;
@@ -121,13 +124,14 @@ class MemberServiceTest {
     }
 
     @Test
-    void unknownHouseholdIs404BeforeAnything() {
+    void unknownHouseholdIs404WithoutLockingAnything() {
         UUID unknown = UUID.randomUUID();
-        when(households.findByIdForUpdate(unknown)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.leave(unknown, ownerId))
                 .isInstanceOf(NotFoundException.class)
                 .extracting(e -> ((DomainException) e).getCode()).isEqualTo("household-not-found");
+        // Un no-miembro nunca llega a bloquear la fila del hogar.
+        verify(households, never()).findByIdForUpdate(any());
     }
 
     @Test

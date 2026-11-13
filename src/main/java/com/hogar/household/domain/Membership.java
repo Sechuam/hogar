@@ -44,6 +44,10 @@ public class Membership implements Persistable<UUID> {
     @Column(name = "left_at")
     private Instant leftAt;
 
+    /** OWNER que expulsó a este miembro; {@code null} si sigue activo o se fue por su cuenta. */
+    @Column(name = "removed_by")
+    private UUID removedBy;
+
     @Transient
     private boolean isNew = true;
 
@@ -94,6 +98,16 @@ public class Membership implements Persistable<UUID> {
     }
 
     /**
+     * Cierra la membresía por expulsión, registrando quién expulsó.
+     *
+     * @throws IllegalStateException si ya estaba cerrada
+     */
+    public void removeBy(UUID ownerId, Instant now) {
+        leave(now);
+        this.removedBy = Objects.requireNonNull(ownerId, "ownerId");
+    }
+
+    /**
      * Cambia el rol. La regla "no dejar el hogar sin OWNER" involucra a otras membresías y la
      * comprueba el servicio.
      *
@@ -140,6 +154,10 @@ public class Membership implements Persistable<UUID> {
 
     public Instant getLeftAt() {
         return leftAt;
+    }
+
+    public UUID getRemovedBy() {
+        return removedBy;
     }
 
     @Override

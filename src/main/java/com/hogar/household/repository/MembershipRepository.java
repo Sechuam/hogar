@@ -1,6 +1,7 @@
 package com.hogar.household.repository;
 
 import com.hogar.household.domain.Membership;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -16,6 +17,11 @@ public interface MembershipRepository extends JpaRepository<Membership, UUID> {
     @Query("select count(m) > 0 from Membership m"
             + " where m.householdId = :householdId and m.userId = :userId and m.leftAt is null")
     boolean existsActive(UUID householdId, UUID userId);
+
+    /** Si el usuario fue expulsado del hogar en algún momento posterior a {@code since}. */
+    @Query("select count(m) > 0 from Membership m where m.householdId = :householdId and m.userId = :userId"
+            + " and m.removedBy is not null and m.leftAt > :since")
+    boolean wasRemovedAfter(UUID householdId, UUID userId, Instant since);
 
     @Query("select m from Membership m where m.userId = :userId and m.leftAt is null order by m.joinedAt")
     List<Membership> findActiveByUserId(UUID userId);
