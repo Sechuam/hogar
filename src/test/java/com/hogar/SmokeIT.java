@@ -3,9 +3,12 @@ package com.hogar;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.hogar.support.AbstractIntegrationTest;
+import com.hogar.support.TestUsers.TestUser;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -13,9 +16,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 /** Prueba de humo: la app arranca contra PostgreSQL, Flyway migra y la seguridad base responde. */
 class SmokeIT extends AbstractIntegrationTest {
-
-    @Autowired
-    private TestRestTemplate rest;
 
     @Autowired
     private JdbcTemplate jdbc;
@@ -26,6 +26,45 @@ class SmokeIT extends AbstractIntegrationTest {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).contains("\"status\":\"UP\"");
+    }
+
+    @Test
+    void validAccessTokenAuthenticates() {
+        TestUser user = users().create("Ana");
+
+        ResponseEntity<String> response = rest.exchange("/api/__no-existe__", HttpMethod.GET,
+                new HttpEntity<>(user.bearer()), String.class);
+
+        // Autenticado: llega a Spring MVC, que responde 404 (no 401).
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    void expiredAccessTokenIsRejected() {
+        TestUser user = users().create("Ana");
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(users().expiredTokenFor(user.id()));
+
+        ResponseEntity<String> response = rest.exchange("/api/__no-existe__", HttpMethod.GET,
+                new HttpEntity<>(headers), String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(response.getBody()).contains("\"code\":\"unauthorized\"");
+    }
+
+    @Test
+    void tamperedAccessTokenIsRejected() {
+        TestUser user = users().create("Ana");
+        String token = user.accessToken();
+        // Cambia el último carácter de la firma.
+        String tampered = token.substring(0, token.length() - 1) + (token.endsWith("A") ? "B" : "A");
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(tampered);
+
+        ResponseEntity<String> response = rest.exchange("/api/__no-existe__", HttpMethod.GET,
+                new HttpEntity<>(headers), String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
     }
 
     @Test
