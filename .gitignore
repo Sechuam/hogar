@@ -1,0 +1,18 @@
+# Build
+target/
+!.mvn/wrapper/maven-wrapper.jar
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.DS_Store
+
+# Secrets / local
+.env
+*.local.yml
+storage/
+logs/
+
+# Claude Code (local settings only; agents are versioned)
+.claude/settings.local.json
