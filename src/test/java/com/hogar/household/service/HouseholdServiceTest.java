@@ -1,0 +1,128 @@
+package com.hogar.household.service;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import com.hogar.household.domain.Household;
+import com.hogar.household.domain.HouseholdRole;
+import com.hogar.household.domain.Membership;
+import com.hogar.household.domain.SplitPolicy;
+import com.hogar.household.dto.CreateHouseholdRequest;
+import com.hogar.household.dto.HouseholdResponse;
+import com.hogar.household.dto.UpdateHouseholdRequest;
+import com.hogar.household.repository.HouseholdRepository;
+import com.hogar.household.repository.MembershipRepository;
+import com.hogar.shared.error.DomainException;
+import com.hogar.shared.error.ForbiddenException;
+import com.hogar.shared.error.NotFoundException;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+@ExtendWith(MockitoExtension.class)
+class HouseholdServiceTest {
+
+    private static final Instant NOW = Instant.parse("2026-03-01T10:00:00Z");
+
+    @Mock
+    private HouseholdRepository households;
+    @Mock
+    private MembershipRepository memberships;
+
+    private HouseholdService service;
+    private final UUID userId = UUID.randomUUID();
+
+    @BeforeEach
+    void setUp() {
+        service = new HouseholdService(households, memberships, new HouseholdMembershipGuard(memberships),
+                Clock.fixed(NOW, ZoneOffset.UTC));
+    }
+
+    @Test
+    void creatorBecomesOwner() {
+        when(households.save(any(Household.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        HouseholdResponse response = service.create(userId, new CreateHouseholdRequest("  Piso  ", null, null));
+
+        ArgumentCaptor<Membership> membership = ArgumentCaptor.forClass(Membership.class);
+        verify(memberships).save(membership.capture());
+        assertThat(membership.getValue().getUserId()).isEqualTo(userId);
+        assertThat(membership.getValue().isOwner()).isTrue();
+        assertThat(membership.getValue().getJoinedAt()).isEqualTo(NOW);
+        assertThat(response.name()).isEqualTo("Piso");
+        assertThat(response.myRole()).isEqualTo(HouseholdRole.OWNER);
+        assertThat(response.memberCount()).isEqualTo(1);
+        assertThat(response.currency()).isEqualTo("EUR");
+        assertThat(response.splitPolicy()).isEqualTo(SplitPolicy.EQUAL);
+        assertThat(response.createdAt()).isEqualTo(NOW);
+    }
+
+    @Test
+    void listsOnlyActiveMembershipsWithRoleAndCount() {
+        Household a = Household.create("A", null, null, NOW);
+        Household b = Household.create("B", SplitPolicy.PROPORTIONAL, "USD", NOW);
+        when(memberships.findActiveByUserId(userId)).thenReturn(List.of(
+                Membership.owner(a.getId(), userId, NOW), Membership.member(b.getId(), userId, NOW)));
+        when(households.findAllById(List.of(a.getId(), b.getId()))).thenReturn(List.of(b, a));
+        when(memberships.countActive(a.getId())).thenReturn(1L);
+        when(memberships.countActive(b.getId())).thenReturn(3L);
+
+        List<HouseholdResponse> list = service.listMine(userId);
+
+        assertThat(list).extracting(HouseholdResponse::name).containsExactly("A", "B");
+        assertThat(list).extracting(HouseholdResponse::myRole).containsExactly(HouseholdRole.OWNER, HouseholdRole.MEMBER);
+        assertThat(list).extracting(HouseholdResponse::memberCount).containsExactly(1, 3);
+    }
+
+    @Test
+    void nonMemberGets404() {
+        UUID householdId = UUID.randomUUID();
+        when(memberships.findActive(householdId, userId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.get(householdId, userId))
+                .isInstanceOf(NotFoundException.class)
+                .extracting(e -> ((DomainException) e).getCode()).isEqualTo("household-not-found");
+    }
+
+    @Test
+    void ownerUpdatesOnlyGivenFields() {
+        Household household = Household.create("Piso", null, null, NOW.minusSeconds(3600));
+        UUID id = household.getId();
+        when(memberships.findActive(id, userId)).thenReturn(Optional.of(Membership.owner(id, userId, NOW)));
+        when(households.findById(id)).thenReturn(Optional.of(household));
+        when(memberships.countActive(id)).thenReturn(2L);
+
+        HouseholdResponse response = service.update(id, userId, new UpdateHouseholdRequest(null, SplitPolicy.PROPORTIONAL));
+
+        assertThat(response.name()).isEqualTo("Piso");
+        assertThat(response.splitPolicy()).isEqualTo(SplitPolicy.PROPORTIONAL);
+        assertThat(response.memberCount()).isEqualTo(2);
+        assertThat(household.getUpdatedAt()).isEqualTo(NOW);
+
+        service.update(id, userId, new UpdateHouseholdRequest("Casa", null));
+        assertThat(household.getName()).isEqualTo("Casa");
+        assertThat(household.getSplitPolicy()).isEqualTo(SplitPolicy.PROPORTIONAL);
+    }
+
+    @Test
+    void memberCannotUpdate() {
+        UUID id = UUID.randomUUID();
+        when(memberships.findActive(id, userId)).thenReturn(Optional.of(Membership.member(id, userId, NOW)));
+
+        assertThatThrownBy(() -> service.update(id, userId, new UpdateHouseholdRequest("X", null)))
+                .isInstanceOf(ForbiddenException.class)
+                .extracting(e -> ((DomainException) e).getCode()).isEqualTo("owner-role-required");
+    }
+}
