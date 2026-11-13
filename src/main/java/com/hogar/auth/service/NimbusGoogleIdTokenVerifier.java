@@ -43,8 +43,10 @@ public class NimbusGoogleIdTokenVerifier implements GoogleIdTokenVerifier {
         JwtTimestampValidator timestamps = new JwtTimestampValidator(CLOCK_SKEW);
         timestamps.setClock(clock);
         Set<String> allowedAudiences = Set.copyOf(clientIds);
+        // getClaimAsString y no getIssuer(): "accounts.google.com" (sin esquema) no es una URL válida.
+        // Set.of no admite contains(null): se comprueba antes.
         OAuth2TokenValidator<Jwt> issuer = jwt -> check(
-                jwt.getIssuer() != null && GOOGLE_ISSUERS.contains(jwt.getIssuer().toString()),
+                jwt.getClaimAsString("iss") != null && GOOGLE_ISSUERS.contains(jwt.getClaimAsString("iss")),
                 "iss no es de Google");
         OAuth2TokenValidator<Jwt> audience = jwt -> {
             List<String> aud = jwt.getAudience();
