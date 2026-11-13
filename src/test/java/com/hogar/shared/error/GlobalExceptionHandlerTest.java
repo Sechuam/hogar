@@ -3,6 +3,7 @@ package com.hogar.shared.error;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -55,6 +56,14 @@ class GlobalExceptionHandlerTest {
     void forbiddenAndConflictMapToTheirStatus() throws Exception {
         mvc.perform(get("/fake/forbidden")).andExpect(status().isForbidden());
         mvc.perform(get("/fake/conflict")).andExpect(status().isConflict());
+    }
+
+    @Test
+    void tooManyRequestsAddsRetryAfterHeader() throws Exception {
+        mvc.perform(get("/fake/too-many"))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(header().string("Retry-After", "42"))
+                .andExpect(jsonPath("$.code").value("rate-limited"));
     }
 
     @Test
@@ -117,6 +126,11 @@ class GlobalExceptionHandlerTest {
         @GetMapping("/fake/conflict")
         void conflict() {
             throw new ConflictException("email-already-registered", "El email ya está registrado");
+        }
+
+        @GetMapping("/fake/too-many")
+        void tooMany() {
+            throw new TooManyRequestsException("rate-limited", "Demasiados intentos", 42);
         }
 
         @GetMapping("/fake/optimistic-lock")
