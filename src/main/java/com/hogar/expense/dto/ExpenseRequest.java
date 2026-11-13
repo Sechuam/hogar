@@ -14,7 +14,8 @@ import java.util.UUID;
 /**
  * Alta o reemplazo (PUT) de un gasto común.
  *
- * @param paidBy miembro activo que pagó; {@code null} = el usuario autenticado
+ * @param paidBy miembro activo que pagó; {@code null} = el usuario autenticado al crear, o el
+ *               pagador actual al editar (PUT)
  */
 public record ExpenseRequest(
         @NotNull @DecimalMin("0.01") @DecimalMax("999999999.99") @Digits(integer = 9, fraction = 2) BigDecimal amount,

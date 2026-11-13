@@ -111,6 +111,21 @@ class ExpenseIT extends FinanceApiSupport {
     }
 
     @Test
+    void ownerEditingWithoutPaidByKeepsTheCurrentPayerAndShares() {
+        Flat f = flat(SplitPolicy.EQUAL);
+        ExpenseResponse created = createExpense(f.luis(), f.id(), expense("30.00", MARCH, f.eva().id()));
+
+        // Ana (OWNER) corrige la descripción sin reenviar paidBy: Eva sigue siendo la pagadora (D-042).
+        ExpenseResponse updated = read(call(HttpMethod.PUT, expensePath(f.id(), created.id()), f.ana(),
+                new ExpenseRequest(new BigDecimal("30.00"), "Luz marzo", ExpenseCategory.ELECTRICITY, MARCH, null)),
+                ExpenseResponse.class);
+
+        assertThat(updated.paidBy()).isEqualTo(f.eva().id());
+        assertThat(updated.description()).isEqualTo("Luz marzo");
+        assertThat(updated.shares()).isEqualTo(created.shares());
+    }
+
+    @Test
     void onlyPayerCreatorOrOwnerCanEditOrDelete() {
         Flat f = flat(SplitPolicy.EQUAL);
         // Creado por Luis, pagado por Eva... y Pablo (MEMBER) no es ninguno de los dos.

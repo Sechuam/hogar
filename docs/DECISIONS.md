@@ -242,3 +242,13 @@ tamaño máximo de página). El detalle usa `@EntityGraph`.
 Mismo algoritmo (mayor resto exacto en enteros) para repartir gastos y para los porcentajes del
 resumen de ingresos; vive en `shared` porque lo usan dos features. El desempate por `userId`
 compara el UUID como texto (mismo orden que `uuid` en PostgreSQL; `UUID.compareTo` compara con signo).
+
+## D-042 · `paidBy` nulo al editar conserva el pagador actual — Aceptada (Fase 2)
+Al crear, `paidBy` nulo = el usuario autenticado. Al editar (PUT), `paidBy` nulo **conserva** el
+pagador: si significara "quien edita", un OWNER que corrige la descripción se convertiría en
+pagador y el reparto se recalcularía por sorpresa. El pagador solo se valida si cambia, para poder
+seguir editando gastos de alguien que ya dejó el hogar.
+
+## D-043 · Paginación fuera de rango → 400, no se acota — Aceptada (Fase 2)
+`size` > 100, `size` < 1 o `page` < 0 devuelven 400: acotar en silencio haría creer al cliente
+que ha recibido todo. `from > to` → 400 `invalid-date-range` (`BadRequestException` compartida).

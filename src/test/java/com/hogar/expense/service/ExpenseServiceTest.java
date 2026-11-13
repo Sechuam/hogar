@@ -25,6 +25,7 @@ import com.hogar.household.dto.ActiveMember;
 import com.hogar.household.dto.HouseholdSplitInfo;
 import com.hogar.household.service.HouseholdQueries;
 import com.hogar.income.service.IncomeQueries;
+import com.hogar.shared.error.BadRequestException;
 import com.hogar.shared.error.BusinessRuleException;
 import com.hogar.shared.error.DomainException;
 import com.hogar.shared.error.ForbiddenException;
@@ -209,7 +210,7 @@ class ExpenseServiceTest {
     @Test
     void listRejectsAnInvertedDateRange() {
         assertThatThrownBy(() -> service.list(householdId, ana, DATE, DATE.minusDays(1), null, null, 0, 20))
-                .isInstanceOf(InvalidQueryException.class)
+                .isInstanceOf(BadRequestException.class)
                 .extracting(ExpenseServiceTest::code).isEqualTo("invalid-date-range");
         verifyNoInteractions(expenses);
     }

@@ -62,9 +62,9 @@ Todos bajo `/api/households/{householdId}` y autenticados. No miembro → 404 `h
 | Método y ruta | Quién | Cuerpo → respuesta | Reglas |
 |---|---|---|---|
 | `POST /expenses` | miembro | `ExpenseRequest` → 201 `ExpenseResponse` + `Location` | `paidBy` null → el autenticado; `paidBy` no miembro activo → 422 `payer-not-member` |
-| `GET /expenses?from=&to=&category=&paidBy=&page=&size=` | miembro | → 200 `PageResponse<ExpenseResponse>` | orden `date desc, createdAt desc`; `size` máx. 100 |
+| `GET /expenses?from=&to=&category=&paidBy=&page=&size=` | miembro | → 200 `PageResponse<ExpenseResponse>` | orden `date desc, createdAt desc`; `size` 1–100 y `page` ≥ 0 (si no, 400); `from > to` → 400 `invalid-date-range` |
 | `GET /expenses/{expenseId}` | miembro | → 200 | |
-| `PUT /expenses/{expenseId}` | pagador, creador u OWNER | `ExpenseRequest` → 200 | si cambian `amount`, `date` o `paidBy` → **se recalcula** el reparto con la política, ingresos y miembros **actuales**; si solo cambian descripción/categoría, los shares no se tocan. Sin permiso → 403 `expense-edit-forbidden` |
+| `PUT /expenses/{expenseId}` | pagador, creador u OWNER | `ExpenseRequest` → 200 | `paidBy` nulo conserva el pagador (D-042); si cambian `amount`, `date` o `paidBy` → **se recalcula** el reparto con la política, ingresos y miembros **actuales**; si solo cambian descripción/categoría, los shares no se tocan. Sin permiso → 403 `expense-edit-forbidden` |
 | `DELETE /expenses/{expenseId}` | pagador, creador u OWNER | → 204 | |
 
 - Participantes del reparto: miembros **activos en el momento de crear (o recalcular)** el gasto (D-034).

@@ -13,6 +13,7 @@ import com.hogar.household.domain.SplitPolicy;
 import com.hogar.household.dto.HouseholdSplitInfo;
 import com.hogar.household.service.HouseholdQueries;
 import com.hogar.income.service.IncomeQueries;
+import com.hogar.shared.error.BadRequestException;
 import com.hogar.shared.error.BusinessRuleException;
 import com.hogar.shared.error.ForbiddenException;
 import com.hogar.shared.error.NotFoundException;
@@ -74,7 +75,7 @@ public class ExpenseService {
     /**
      * Gastos del hogar, fecha desc y alta desc. Filtros opcionales; {@code from}/{@code to} inclusivos.
      *
-     * @throws InvalidQueryException {@code invalid-date-range} si {@code from > to}
+     * @throws BadRequestException {@code invalid-date-range} si {@code from > to}
      */
     @Transactional(readOnly = true)
     public PageResponse<ExpenseResponse> list(UUID householdId, UUID userId, LocalDate fromOrNull,
@@ -82,7 +83,7 @@ public class ExpenseService {
                                               UUID paidByOrNull, int page, int size) {
         guard.requireMember(householdId, userId);
         if (fromOrNull != null && toOrNull != null && fromOrNull.isAfter(toOrNull)) {
-            throw new InvalidQueryException(INVALID_DATE_RANGE, "'from' no puede ser posterior a 'to'.");
+            throw new BadRequestException(INVALID_DATE_RANGE, "'from' no puede ser posterior a 'to'.");
         }
         return PageResponse.of(expenses.search(householdId, fromOrNull, toOrNull, categoryOrNull, paidByOrNull,
                 PageRequest.of(page, size)), ExpenseMapper::toResponse);
@@ -97,7 +98,8 @@ public class ExpenseService {
     /**
      * PUT: reemplaza los datos. Si cambian importe, fecha o pagador, el reparto se recalcula con la
      * política, ingresos y miembros <b>actuales</b>; si no, las partes no se tocan. Solo pagador,
-     * creador u OWNER. {@code paidBy} nulo = el usuario autenticado, igual que al crear.
+     * creador u OWNER. {@code paidBy} nulo = se conserva el pagador actual (D-042): editar la
+     * descripción no debe convertir en pagador a quien edita.
      */
     @Transactional
     public ExpenseResponse update(UUID householdId, UUID userId, UUID expenseId, ExpenseRequest request) {
@@ -106,7 +108,7 @@ public class ExpenseService {
         HouseholdSplitInfo info = households.getSplitInfo(householdId);
         requireCanModify(expense, info, userId);
 
-        UUID payer = payerOf(request, userId);
+        UUID payer = request.paidBy() != null ? request.paidBy() : expense.getPaidBy();
         boolean payerChanged = !payer.equals(expense.getPaidBy());
         boolean recalculate = payerChanged
                 || request.amount().compareTo(expense.getAmount()) != 0
