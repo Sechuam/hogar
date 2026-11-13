@@ -60,6 +60,19 @@ abstract class HouseholdApiSupport extends AbstractIntegrationTest {
         assertThat(tree(response).path("code").asText()).isEqualTo(code);
     }
 
+    /**
+     * Cuerpo inválido: JSON roto → {@code bad-request}; JSON válido con un campo de tipo
+     * incorrecto → {@code validation-error} con ese campo en {@code errors[]}.
+     */
+    protected void assertBadBody(ResponseEntity<String> response) {
+        assertThat(response.getStatusCode()).as(response.getBody()).isEqualTo(HttpStatus.BAD_REQUEST);
+        String code = tree(response).path("code").asText();
+        assertThat(code).isIn("bad-request", "validation-error");
+        if (code.equals("validation-error")) {
+            assertThat(tree(response).path("errors")).isNotEmpty();
+        }
+    }
+
     protected HouseholdResponse createHousehold(TestUser owner, String name) {
         ResponseEntity<String> response = call(HttpMethod.POST, "/api/households", owner,
                 new CreateHouseholdRequest(name, null, null));

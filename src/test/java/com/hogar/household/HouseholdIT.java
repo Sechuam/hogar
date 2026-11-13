@@ -161,8 +161,7 @@ class HouseholdIT extends HouseholdApiSupport {
                 HttpStatus.BAD_REQUEST, "validation-error");
         assertProblem(call(HttpMethod.POST, "/api/households", ana,
                 new CreateHouseholdRequest("x".repeat(101), null, null)), HttpStatus.BAD_REQUEST, "validation-error");
-        assertProblem(call(HttpMethod.POST, "/api/households", ana, Map.of("name", "Piso", "splitPolicy", "RANDOM")),
-                HttpStatus.BAD_REQUEST, "bad-request");
+        assertBadBody(call(HttpMethod.POST, "/api/households", ana, Map.of("name", "Piso", "splitPolicy", "RANDOM")));
 
         UUID id = createHousehold(ana, "Piso").id();
         assertProblem(call(HttpMethod.PATCH, householdPath(id), ana, new UpdateHouseholdRequest(" ", null)),

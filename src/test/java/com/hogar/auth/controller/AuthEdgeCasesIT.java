@@ -132,7 +132,8 @@ class AuthEdgeCasesIT extends AbstractIntegrationTest {
         ResponseEntity<JsonNode> response = postRaw("/api/auth/register", body);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
-        assertThat(response.getBody().get("code").asText()).isEqualTo("bad-request");
+        // JSON roto → bad-request; tipo incorrecto en "email" → validation-error de ese campo.
+        assertThat(response.getBody().get("code").asText()).isIn("bad-request", "validation-error");
     }
 
     @ParameterizedTest

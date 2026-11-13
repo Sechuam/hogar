@@ -4,7 +4,12 @@ import java.net.URI;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.fasterxml.jackson.databind.JsonMappingException;
+import com.fasterxml.jackson.databind.exc.MismatchedInputException;
+import java.util.stream.Collectors;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
@@ -47,6 +52,18 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 "El recurso ha sido modificado por otra petición. Vuelve a cargarlo e inténtalo de nuevo.");
     }
 
+    /**
+     * Restricción de BD violada que el servicio no anticipó (carreras de alta, FK a un usuario
+     * inexistente...). Es un conflicto con el estado, no un error del servidor; el detalle
+     * interno (nombre de la restricción) no se expone.
+     */
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    ProblemDetail handleDataIntegrity(DataIntegrityViolationException ex) {
+        log.warn("Violación de integridad no anticipada: {}", ex.getMostSpecificCause().getMessage());
+        return Problems.of(HttpStatus.CONFLICT, "data-conflict", "Conflict",
+                "La operación entra en conflicto con el estado actual de los datos.");
+    }
+
     @ExceptionHandler(AccessDeniedException.class)
     ProblemDetail handleAccessDenied(AccessDeniedException ex) {
         return Problems.of(HttpStatus.FORBIDDEN, "forbidden", "Forbidden",
@@ -71,6 +88,31 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 "La petición contiene campos no válidos.");
         problem.setProperty("errors", errors);
         return ResponseEntity.badRequest().body(problem);
+    }
+
+    /**
+     * JSON con un tipo incorrecto en un campo concreto (enum desconocido, texto donde va un número,
+     * objeto donde va un texto...) se trata como error de validación de ese campo, con
+     * {@code errors[]}. JSON sintácticamente roto o cuerpo ausente sigue siendo {@code bad-request}.
+     */
+    @Override
+    protected ResponseEntity<Object> handleHttpMessageNotReadable(
+            HttpMessageNotReadableException ex, HttpHeaders headers, HttpStatusCode status, WebRequest request) {
+        if (ex.getCause() instanceof MismatchedInputException mismatch && !mismatch.getPath().isEmpty()) {
+            ProblemDetail problem = Problems.of(HttpStatus.BAD_REQUEST, "validation-error", "Bad Request",
+                    "La petición contiene campos no válidos.");
+            problem.setProperty("errors", List.of(new FieldViolation(
+                    fieldPath(mismatch.getPath()), "valor no válido para este campo")));
+            return ResponseEntity.badRequest().body(problem);
+        }
+        return super.handleHttpMessageNotReadable(ex, headers, status, request);
+    }
+
+    private static String fieldPath(List<JsonMappingException.Reference> path) {
+        return path.stream()
+                .map(ref -> ref.getFieldName() != null ? ref.getFieldName() : "[" + ref.getIndex() + "]")
+                .collect(Collectors.joining("."))
+                .replace(".[", "[");
     }
 
     /** Añade {@code type} y {@code code} a los ProblemDetail que genera Spring MVC. */

@@ -95,6 +95,25 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void wrongJsonTypeIsValidationErrorOfThatField() throws Exception {
+        mvc.perform(post("/fake/validate")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"ok\",\"amount\":\"mucho\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("validation-error"))
+                .andExpect(jsonPath("$.errors[0].field").value("amount"));
+    }
+
+    @Test
+    void unanticipatedConstraintViolationIs409WithoutInternals() throws Exception {
+        mvc.perform(get("/fake/integrity"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("data-conflict"))
+                .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("uk_"))));
+    }
+
+    @Test
     void unexpectedErrorDoesNotLeakInternalMessage() throws Exception {
         mvc.perform(get("/fake/boom"))
                 .andExpect(status().isInternalServerError())
@@ -140,6 +159,11 @@ class GlobalExceptionHandlerTest {
 
         @PostMapping("/fake/validate")
         void validate(@Valid @RequestBody FakeRequest request) {
+        }
+
+        @GetMapping("/fake/integrity")
+        void integrity() {
+            throw new org.springframework.dao.DataIntegrityViolationException("duplicate key uk_users_email");
         }
 
         @GetMapping("/fake/boom")

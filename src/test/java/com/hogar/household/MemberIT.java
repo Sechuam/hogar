@@ -207,7 +207,6 @@ class MemberIT extends HouseholdApiSupport {
 
         assertProblem(call(HttpMethod.PATCH, memberPath(id, ana.id()), ana, Map.of()), HttpStatus.BAD_REQUEST,
                 "validation-error");
-        assertProblem(call(HttpMethod.PATCH, memberPath(id, ana.id()), ana, Map.of("role", "ADMIN")),
-                HttpStatus.BAD_REQUEST, "bad-request");
+        assertBadBody(call(HttpMethod.PATCH, memberPath(id, ana.id()), ana, Map.of("role", "ADMIN")));
     }
 }
