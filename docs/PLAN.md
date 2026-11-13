@@ -61,7 +61,7 @@ decisiones D-013 a D-033.
 
 ---
 
-## Fase 2 — Finanzas: ingresos y gastos 🟡
+## Fase 2 — Finanzas: ingresos y gastos ✅
 **Rama:** `fase-2-finanzas`
 
 **Contratos:** ver `docs/api/fase-2-contratos.md` (`IncomeQueries`, `HouseholdQueries`,
@@ -86,6 +86,11 @@ decisiones D-013 a D-033.
 - Tests obligatorios del calculador (unitarios + property-based simple con muchos importes aleatorios):
   importes impares (0,01 €, 10,00/3), 3+ miembros, un miembro con ingreso 0, todos 0,
   un solo miembro, cambio de política posterior que no altera el histórico.
+
+**Resultado:** 243 tests unitarios + 338 IT en verde (propiedad de 10 000 casos del reparto,
+invariante Σ shares == importe comprobada también por SQL, snapshot frente a cambios de política,
+ingresos y miembros, concurrencia sin deadlocks, sin N+1). Cobertura ≥ 98 % en `income.*`,
+`expense.*` y `shared.money`. Decisiones D-034 a D-046; contrato en `docs/api/fase-2-contratos.md`.
 
 ---
 

@@ -252,3 +252,28 @@ seguir editando gastos de alguien que ya dejó el hogar.
 ## D-043 · Paginación fuera de rango → 400, no se acota — Aceptada (Fase 2)
 `size` > 100, `size` < 1 o `page` < 0 devuelven 400: acotar en silencio haría creer al cliente
 que ha recibido todo. `from > to` → 400 `invalid-date-range` (`BadRequestException` compartida).
+
+## D-044 · Editar o borrar un gasto bloquea su fila — Aceptada (Fase 2)
+**Contexto:** QA reprodujo deadlocks (40P01) con dos PUT, o PUT + DELETE, simultáneos sobre el
+mismo gasto: durante el flush, las partes (borrado de huérfanas e inserción) y la fila del gasto
+se bloqueaban en distinto orden en cada transacción → 500.
+**Decisión:** `update` y `delete` cargan la raíz con `SELECT … FOR UPDATE` (sin fetch de partes:
+PostgreSQL no permite `FOR UPDATE` sobre el lado nullable de un outer join). Las escrituras sobre
+un mismo gasto se serializan; la segunda ve el estado ya confirmado. Como red de seguridad,
+`PessimisticLockingFailureException` (bloqueo/deadlock) → 409 `concurrent-modification`, igual
+que el bloqueo optimista.
+
+## D-045 · Entrada JSON estricta — Aceptada (Fase 2)
+Ningún texto puede contener U+0000 (PostgreSQL no lo almacena: acababa en error de BD) y
+`LocalDate` solo se acepta como texto ISO-8601 (un número se interpretaba como *epoch day*). Ambos
+casos son `validation-error` del campo. Se configura una vez en `JacksonConfig` para toda la API.
+
+## D-046 · Los errores de BD se registran sin datos — Aceptada (Fase 2)
+Ante una violación de integridad se registran solo `SQLState` y nombre de la restricción: el
+mensaje de PostgreSQL ("Failing row contains (...)", "Key (email)=(...)") puede incluir datos
+personales.
+
+**Deuda conocida (Fase 2):** las fechas de gastos e ingresos no tienen rango (se admite el año
+9999); `GET /incomes` muestra también ingresos de ex-miembros (no cuentan en el reparto ni en el
+resumen); una baja de miembro simultánea a un alta de gasto en la que es pagador no está
+serializada; si un ex-miembro vuelve, sus ingresos recurrentes antiguos vuelven a contar.

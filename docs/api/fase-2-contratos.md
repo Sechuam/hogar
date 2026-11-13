@@ -72,3 +72,13 @@ Todos bajo `/api/households/{householdId}` y autenticados. No miembro → 404 `h
   los miembros sin ingresos ese mes participan con 0.
 - `warnings` en la respuesta se derivan de `split_fallback` (persistido), así que también aparecen al consultar.
 - Cambiar la `splitPolicy` del hogar o los ingresos **no** modifica gastos existentes (snapshot).
+
+## 4. Aclaraciones tras QA
+
+- `GET /incomes` lista todos los ingresos del hogar, también los de ex-miembros (histórico); el
+  `summary` y el reparto solo cuentan miembros **activos**.
+- Ediciones concurrentes del mismo gasto se serializan (D-044); si la BD aborta una por bloqueo,
+  409 `concurrent-modification`.
+- Texto con U+0000 o fecha numérica → 400 `validation-error` del campo (D-045). Importes con ceros
+  de más (`12.340`) → 400: `@Digits` cuenta la escala tal cual llega.
+- Importes en notación científica (`1e2`) o entre comillas (`"12.34"`) se aceptan si el valor es válido.
