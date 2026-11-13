@@ -23,6 +23,7 @@ import com.hogar.support.AbstractIntegrationTest;
 import com.hogar.support.TestUsers.TestUser;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -33,6 +34,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
  * Atajos HTTP para los IT de ingresos y gastos: hogares, miembros, ingresos y gastos creados por la
@@ -42,6 +44,9 @@ public abstract class FinanceApiSupport extends AbstractIntegrationTest {
 
     @Autowired
     protected ObjectMapper json;
+
+    @Autowired
+    protected JdbcTemplate jdbc;
 
     protected ResponseEntity<String> call(HttpMethod method, String path, TestUser user, Object body) {
         HttpHeaders headers = user != null ? user.bearer() : new HttpHeaders();
@@ -187,5 +192,37 @@ public abstract class FinanceApiSupport extends AbstractIntegrationTest {
 
     protected static String expensePath(UUID householdId, UUID expenseId) {
         return expensesPath(householdId) + "/" + expenseId;
+    }
+
+    // --- Comprobaciones directas en BD ---
+
+    /**
+     * Invariante de dinero en BD, sin pasar por JPA: cada gasto del hogar tiene al menos una parte,
+     * sus partes suman exactamente su importe y no hay dos partes del mismo usuario.
+     */
+    protected void assertDbMoneyInvariant(UUID householdId) {
+        List<String> broken = jdbc.queryForList("""
+                select e.id::text || ' amount=' || e.amount || ' shares=' || coalesce(sum(s.amount), 0)
+                       || ' n=' || count(s.id) || ' users=' || count(distinct s.user_id)
+                from shared_expenses e
+                left join expense_shares s on s.expense_id = e.id
+                where e.household_id = ?
+                group by e.id, e.amount
+                having count(s.id) = 0 or sum(s.amount) <> e.amount or count(s.id) <> count(distinct s.user_id)
+                """, String.class, householdId);
+        assertThat(broken).as("gastos con partes incoherentes en BD").isEmpty();
+    }
+
+    /** Usuarios con parte en el gasto según la BD (para detectar partes huérfanas o sobrantes). */
+    protected List<UUID> dbShareUsers(UUID expenseId) {
+        return jdbc.queryForList("select user_id from expense_shares where expense_id = ? order by user_id",
+                UUID.class, expenseId);
+    }
+
+    /** Partes en BD del gasto, {@code userId → importe} con escala 2. */
+    protected Map<UUID, String> dbShares(UUID expenseId) {
+        return jdbc.queryForList("select user_id, amount from expense_shares where expense_id = ?", expenseId)
+                .stream().collect(Collectors.toMap(r -> (UUID) r.get("user_id"),
+                        r -> ((BigDecimal) r.get("amount")).toPlainString()));
     }
 }
