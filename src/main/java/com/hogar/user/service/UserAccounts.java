@@ -1,5 +1,6 @@
 package com.hogar.user.service;
 
+import com.hogar.user.dto.GoogleSignIn;
 import com.hogar.user.dto.UserResponse;
 import java.util.Optional;
 import java.util.UUID;
@@ -30,7 +31,7 @@ public interface UserAccounts {
      * {@code exp} y {@code email_verified}). Orden de resolución: por {@code subject} vinculado →
      * por email de una cuenta existente (se vincula) → alta nueva sin contraseña.
      */
-    UserResponse signInWithGoogle(String subject, String email, String displayName);
+    GoogleSignIn signInWithGoogle(String subject, String email, String displayName);
 
     /** Perfil del usuario, si existe. */
     Optional<UserResponse> findProfile(UUID userId);

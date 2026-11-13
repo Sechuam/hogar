@@ -7,6 +7,7 @@ import com.hogar.auth.dto.RefreshTokenRequest;
 import com.hogar.auth.dto.RegisterRequest;
 import com.hogar.auth.service.GoogleIdTokenVerifier.GoogleIdentity;
 import com.hogar.shared.error.UnauthorizedException;
+import com.hogar.user.dto.GoogleSignIn;
 import com.hogar.user.dto.UserResponse;
 import com.hogar.user.service.UserAccounts;
 import org.springframework.stereotype.Service;
@@ -60,9 +61,12 @@ public class AuthService {
             throw new UnauthorizedException(GOOGLE_EMAIL_NOT_VERIFIED,
                     "La cuenta de Google no tiene el email verificado.");
         }
-        UserResponse user = userAccounts.signInWithGoogle(
+        GoogleSignIn signIn = userAccounts.signInWithGoogle(
                 identity.subject(), identity.email(), displayNameFor(identity));
-        return startSession(user);
+        if (signIn.credentialsReset()) {
+            refreshTokens.revokeAllForUser(signIn.user().id());
+        }
+        return startSession(signIn.user());
     }
 
     /** Ver {@link RefreshTokenService#rotate}: la revocación por reutilización se confirma pese al 401. */

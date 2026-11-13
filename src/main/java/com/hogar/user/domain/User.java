@@ -113,6 +113,17 @@ public class User {
         touch(now);
     }
 
+    /**
+     * Elimina la contraseña: a partir de ahora solo se entra con un proveedor externo.
+     * Se usa al vincular Google a una cuenta cuyo email nunca se verificó (ver D-021).
+     */
+    public void removePassword(Instant now) {
+        if (passwordHash != null) {
+            passwordHash = null;
+            touch(now);
+        }
+    }
+
     public boolean hasPassword() {
         return passwordHash != null;
     }

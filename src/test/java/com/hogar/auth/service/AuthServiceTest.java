@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -17,6 +18,7 @@ import com.hogar.auth.dto.RegisterRequest;
 import com.hogar.auth.service.GoogleIdTokenVerifier.GoogleIdentity;
 import com.hogar.shared.error.ConflictException;
 import com.hogar.shared.error.UnauthorizedException;
+import com.hogar.user.dto.GoogleSignIn;
 import com.hogar.user.dto.UserResponse;
 import com.hogar.user.service.UserAccounts;
 import java.util.List;
@@ -94,10 +96,25 @@ class AuthServiceTest {
     void googleWithVerifiedEmailSignsIn() {
         when(googleVerifier.verify("id-token"))
                 .thenReturn(new GoogleIdentity("sub-1", "ana@gmail.com", true, "Ana García"));
-        when(userAccounts.signInWithGoogle("sub-1", "ana@gmail.com", "Ana García")).thenReturn(ANA);
+        when(userAccounts.signInWithGoogle("sub-1", "ana@gmail.com", "Ana García")).thenReturn(new GoogleSignIn(ANA, false));
         givenTokensFor(ANA.id());
 
         assertThat(service.google(new GoogleLoginRequest("id-token")).user()).isEqualTo(ANA);
+        verify(refreshTokens, never()).revokeAllForUser(any());
+    }
+
+    @Test
+    void googleLinkThatResetsCredentialsRevokesEveryPreviousSession() {
+        when(googleVerifier.verify("id-token"))
+                .thenReturn(new GoogleIdentity("sub-1", "ana@gmail.com", true, "Ana García"));
+        when(userAccounts.signInWithGoogle("sub-1", "ana@gmail.com", "Ana García")).thenReturn(new GoogleSignIn(ANA, true));
+        givenTokensFor(ANA.id());
+
+        service.google(new GoogleLoginRequest("id-token"));
+
+        var order = inOrder(refreshTokens);
+        order.verify(refreshTokens).revokeAllForUser(ANA.id());
+        order.verify(refreshTokens).issue(ANA.id());
     }
 
     @Test

@@ -4,6 +4,7 @@ import com.hogar.shared.error.ConflictException;
 import com.hogar.user.domain.IdentityProvider;
 import com.hogar.user.domain.User;
 import com.hogar.user.domain.UserIdentity;
+import com.hogar.user.dto.GoogleSignIn;
 import com.hogar.user.dto.UserResponse;
 import com.hogar.user.repository.UserIdentityRepository;
 import com.hogar.user.repository.UserRepository;
@@ -75,27 +76,34 @@ class UserAccountService implements UserAccounts {
 
     @Override
     @Transactional
-    public UserResponse signInWithGoogle(String subject, String email, String displayName) {
+    public GoogleSignIn signInWithGoogle(String subject, String email, String displayName) {
         Optional<UserIdentity> linked = identities.findByProviderAndSubject(IdentityProvider.GOOGLE, subject);
         if (linked.isPresent()) {
-            return toResponse(linked.get().getUser());
+            return new GoogleSignIn(toResponse(linked.get().getUser()), false);
         }
         Instant now = Instant.now(clock);
         String normalized = User.normalizeEmail(email);
         Optional<User> existing = users.findByEmail(normalized);
         if (existing.isPresent()) {
             User user = existing.get();
+            // Pre-secuestro de cuenta: alguien pudo registrarse con contraseña usando este email
+            // sin poseerlo. Si el email nunca se verificó, Google acredita ahora al dueño real y
+            // la contraseña previa deja de ser de confianza: se elimina (y el llamante revoca sesiones).
+            boolean credentialsReset = !user.isEmailVerified() && user.hasPassword();
+            if (credentialsReset) {
+                user.removePassword(now);
+                log.warn("Contraseña eliminada al vincular Google a la cuenta no verificada {}", user.getId());
+            }
             user.linkIdentity(IdentityProvider.GOOGLE, subject, normalized, now);
-            // Google ha verificado que el email es de quien inicia sesión.
             user.markEmailVerified(now);
             log.info("Identidad de Google vinculada a la cuenta existente {}", user.getId());
-            return toResponse(user);
+            return new GoogleSignIn(toResponse(user), credentialsReset);
         }
         User user = User.registerExternal(normalized, displayName, now);
         user.linkIdentity(IdentityProvider.GOOGLE, subject, normalized, now);
         users.save(user);
         log.info("Usuario registrado con Google: {}", user.getId());
-        return toResponse(user);
+        return new GoogleSignIn(toResponse(user), false);
     }
 
     @Override

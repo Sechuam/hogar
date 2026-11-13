@@ -75,6 +75,13 @@ public class RefreshTokenService {
     }
 
     /** Cierra la sesión revocando la familia del token. Token desconocido → no hace nada. */
+    /** Revoca todas las sesiones del usuario (p. ej. al invalidar sus credenciales). */
+    @Transactional
+    public void revokeAllForUser(UUID userId) {
+        int revoked = tokens.revokeAllByUserId(userId, Instant.now(clock));
+        log.info("Revocados {} refresh tokens del usuario {}", revoked, userId);
+    }
+
     @Transactional
     public void revokeFamilyOf(String rawToken) {
         tokens.findByTokenHash(OpaqueTokens.sha256Hex(rawToken))

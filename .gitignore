@@ -16,3 +16,4 @@ logs/
 
 # Claude Code (local settings only; agents are versioned)
 .claude/settings.local.json
+.claude/worktrees/

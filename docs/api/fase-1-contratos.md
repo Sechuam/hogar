@@ -37,7 +37,8 @@ Todos devuelven `AuthResponse` salvo indicación. Públicos (ver `SecurityConfig
   (`hogar.security.jwt.issuer`), `sub` = userId, `iat`, `exp` (`access-token-ttl`). Sin roles:
   la autorización es por hogar.
 - Google (`POST /api/auth/google`): mismo email verificado que una cuenta existente → se
-  vincula (`user_identities`) y se entra en esa cuenta. Si no existe → se crea usuario sin
+  vincula (`user_identities`) y se entra en esa cuenta. Si el email de esa cuenta **no estaba
+  verificado**, se elimina su contraseña y se revocan sus sesiones (D-021). Si no existe → se crea usuario sin
   contraseña. Si `sub` de Google ya está vinculado → se entra en su usuario aunque el email
   de Google haya cambiado.
 - Rate limiting (`hogar.security.rate-limit.*`) en register/login/google por clave IP + email
@@ -57,10 +58,10 @@ Todos autenticados. `{id}` de un hogar donde no eres miembro activo → **404 `h
 | `PATCH /api/households/{id}/members/{userId}` | OWNER | `UpdateMemberRoleRequest` → 200 `MemberResponse` | 422 `last-owner` si dejaría el hogar sin OWNER; 404 `member-not-found` |
 | `DELETE /api/households/{id}/members/{userId}` | OWNER | → 204 | expulsar; no a uno mismo (usar leave) → 422 `use-leave-endpoint` |
 | `POST /api/households/{id}/leave` | miembro | → 204 | 422 `last-owner` si es el último OWNER y quedan más miembros (debe ceder el rol); si es el único miembro puede salir y el hogar queda sin miembros activos |
-| `POST /api/households/{id}/invitations` | OWNER | `CreateInvitationRequest` → 201 `InvitationResponse` | código aleatorio de 10 caracteres (alfabeto Crockford Base32, `SecureRandom`) |
+| `POST /api/households/{id}/invitations` | OWNER | `CreateInvitationRequest` (opcional) → 201 `InvitationResponse` | código aleatorio de 10 caracteres (alfabeto Crockford Base32, `SecureRandom`) |
 | `GET /api/households/{id}/invitations` | OWNER | → 200 `List<InvitationResponse>` | |
 | `DELETE /api/households/{id}/invitations/{invitationId}` | OWNER | → 204 | revoca (idempotente) |
-| `POST /api/invitations/{code}/accept` | autenticado | → 200 `HouseholdResponse` | 404 `invitation-not-found` (inexistente o revocada), 422 `invitation-expired`, 422 `invitation-exhausted`, 409 `already-member`; se une como MEMBER |
+| `POST /api/invitations/{code}/accept` | autenticado | → 200 `HouseholdResponse` | código normalizado (mayúsculas, sin guiones, O→0, I/L→1); 404 `invitation-not-found` (inexistente, revocada u hogar sin miembros), 422 `invitation-expired`, 422 `invitation-exhausted`, 409 `already-member`; se une como MEMBER |
 
 - `MembershipGuard` (en `shared.security`) lo implementa `household.service`.
 - Contrato `user.service.UserDirectory` (lo implementa el coordinador) para nombres de miembros.

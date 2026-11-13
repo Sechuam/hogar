@@ -12,6 +12,7 @@ import com.hogar.shared.error.ConflictException;
 import com.hogar.user.domain.IdentityProvider;
 import com.hogar.user.domain.User;
 import com.hogar.user.domain.UserIdentity;
+import com.hogar.user.dto.GoogleSignIn;
 import com.hogar.user.dto.UserResponse;
 import com.hogar.user.repository.UserIdentityRepository;
 import com.hogar.user.repository.UserRepository;
@@ -131,7 +132,7 @@ class UserAccountServiceTest {
         UserIdentity identity = user.linkIdentity(IdentityProvider.GOOGLE, "sub-1", "antiguo@gmail.com", NOW);
         when(identities.findByProviderAndSubject(IdentityProvider.GOOGLE, "sub-1")).thenReturn(Optional.of(identity));
 
-        UserResponse response = service.signInWithGoogle("sub-1", "nuevo@gmail.com", "Ana");
+        UserResponse response = service.signInWithGoogle("sub-1", "nuevo@gmail.com", "Ana").user();
 
         assertThat(response.id()).isEqualTo(user.getId());
         assertThat(response.linkedProviders()).containsExactly("GOOGLE");
@@ -140,15 +141,18 @@ class UserAccountServiceTest {
     }
 
     @Test
-    void googleSignInLinksToExistingAccountWithSameEmail() {
+    void googleSignInLinksToUnverifiedAccountAndRemovesItsPassword() {
+        // Pre-secuestro: la cuenta con contraseña pudo crearla otra persona con este email.
         User user = passwordUser("ana@example.com");
         when(identities.findByProviderAndSubject(IdentityProvider.GOOGLE, "sub-2")).thenReturn(Optional.empty());
         when(users.findByEmail("ana@example.com")).thenReturn(Optional.of(user));
 
-        UserResponse response = service.signInWithGoogle("sub-2", "Ana@Example.com", "Ana G");
+        GoogleSignIn signIn = service.signInWithGoogle("sub-2", "Ana@Example.com", "Ana G");
+        UserResponse response = signIn.user();
 
+        assertThat(signIn.credentialsReset()).isTrue();
         assertThat(response.id()).isEqualTo(user.getId());
-        assertThat(response.hasPassword()).isTrue();
+        assertThat(response.hasPassword()).isFalse();
         assertThat(response.linkedProviders()).containsExactly("GOOGLE");
         assertThat(user.getIdentities()).extracting(UserIdentity::getSubject).containsExactly("sub-2");
         assertThat(user.isEmailVerified()).isTrue();
@@ -160,7 +164,7 @@ class UserAccountServiceTest {
         when(identities.findByProviderAndSubject(IdentityProvider.GOOGLE, "sub-3")).thenReturn(Optional.empty());
         when(users.findByEmail("nueva@gmail.com")).thenReturn(Optional.empty());
 
-        UserResponse response = service.signInWithGoogle("sub-3", "nueva@gmail.com", "Nueva");
+        UserResponse response = service.signInWithGoogle("sub-3", "nueva@gmail.com", "Nueva").user();
 
         ArgumentCaptor<User> saved = ArgumentCaptor.forClass(User.class);
         verify(users).save(saved.capture());
@@ -170,6 +174,20 @@ class UserAccountServiceTest {
         assertThat(user.getIdentities()).extracting(UserIdentity::getSubject).containsExactly("sub-3");
         assertThat(response).isEqualTo(new com.hogar.user.dto.UserResponse(
                 user.getId(), "nueva@gmail.com", "Nueva", false, List.of("GOOGLE")));
+    }
+
+    @Test
+    void googleSignInKeepsPasswordWhenEmailWasAlreadyVerified() {
+        User user = passwordUser("ana@example.com");
+        user.markEmailVerified(NOW);
+        when(identities.findByProviderAndSubject(IdentityProvider.GOOGLE, "sub-4")).thenReturn(Optional.empty());
+        when(users.findByEmail("ana@example.com")).thenReturn(Optional.of(user));
+
+        GoogleSignIn signIn = service.signInWithGoogle("sub-4", "ana@example.com", "Ana");
+
+        assertThat(signIn.credentialsReset()).isFalse();
+        assertThat(signIn.user().hasPassword()).isTrue();
+        assertThat(signIn.user().linkedProviders()).containsExactly("GOOGLE");
     }
 
     private static User passwordUser(String email) {

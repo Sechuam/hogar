@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.hogar.auth.dto.AuthResponse;
 import com.hogar.auth.dto.GoogleLoginRequest;
 import com.hogar.auth.dto.LoginRequest;
+import com.hogar.auth.dto.RefreshTokenRequest;
 import com.hogar.auth.dto.RegisterRequest;
 import com.hogar.auth.service.GoogleIdTokenVerifier;
 import com.hogar.auth.service.GoogleIdTokenVerifier.GoogleIdentity;
@@ -71,8 +72,17 @@ class GoogleAuthIT extends AbstractIntegrationTest {
         AuthResponse linked = google("token-vincula", AuthResponse.class).getBody();
 
         assertThat(linked.user().id()).isEqualTo(registered.user().id());
-        assertThat(linked.user().hasPassword()).isTrue();
         assertThat(linked.user().linkedProviders()).containsExactly("GOOGLE");
+
+        // El email de la cuenta nunca se verificó: la contraseña puede ser de un atacante que
+        // se registró con un email ajeno. Se elimina y se cierran todas sus sesiones previas.
+        assertThat(linked.user().hasPassword()).isFalse();
+        ResponseEntity<JsonNode> passwordLogin = rest.postForEntity("/api/auth/login",
+                new LoginRequest(email, "contraseña-segura-1"), JsonNode.class);
+        assertThat(passwordLogin.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        ResponseEntity<JsonNode> oldSession = rest.postForEntity("/api/auth/refresh",
+                new RefreshTokenRequest(registered.refreshToken()), JsonNode.class);
+        assertThat(oldSession.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
 
         // Más tarde el email de la cuenta de Google cambia: se entra por el subject vinculado.
         givenToken("token-email-nuevo", new GoogleIdentity(subject, uniqueEmail("cambiado"), true, "Pablo G"));
