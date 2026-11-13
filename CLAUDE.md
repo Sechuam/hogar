@@ -84,8 +84,12 @@ com.hogar
 - **Integración** (`*IT`, ejecutados por Failsafe en `verify`): `@SpringBootTest` +
   Testcontainers PostgreSQL con `@ServiceConnection`, contenedor compartido (clase base
   `AbstractIntegrationTest`). Prueban HTTP → BD de verdad, incluida seguridad y membresía.
+- **Helpers de IT**: `users().create("Ana")` (en `AbstractIntegrationTest`) crea un usuario en BD
+  con su access token (`TestUser.bearer()`); los datos no se limpian entre tests, así que cada
+  test crea los suyos. `HouseholdApiSupport` tiene atajos para hogares, invitaciones y ProblemDetail.
 - **Arquitectura**: `ArchitectureTest` con ArchUnit para las reglas de dependencia.
-- JaCoCo genera informe; umbral mínimo de líneas en `service`/`domain`: 80 %.
+- JaCoCo genera informe combinado y **falla la build** por debajo del 80 % de líneas en cualquier
+  paquete `service`/`domain` (`jacoco:check`).
 - Una fase **no está terminada** si `./mvnw verify` no está en verde.
 
 ## Comandos

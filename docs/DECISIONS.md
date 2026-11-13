@@ -136,7 +136,8 @@ pese al 401 (`noRollbackFor`). Token caducado → 401 sin revocar la familia.
 
 ## D-023 · Rate limiting en memoria con Bucket4j — Aceptada (Fase 1)
 `capacity` intentos por `refill-period` con recarga gradual, por IP + email (Google: solo IP),
-`Retry-After` en el 429. Buckets en Caffeine acotada. La IP sale de `getRemoteAddr()`: tras un
+y además un cupo mayor solo por IP (`ip-capacity`) en registro y login, para que rotar emails desde
+una misma IP no esquive el límite (enumeración, *password spraying*). `Retry-After` en el 429. Buckets en Caffeine acotada. La IP sale de `getRemoteAddr()`: tras un
 proxy habrá que configurar `server.forward-headers-strategy` (nunca leer `X-Forwarded-For` a mano).
 **Limitación:** por instancia; con varias réplicas, pasar a Bucket4j sobre Redis/PostgreSQL.
 
@@ -160,3 +161,40 @@ descarga el JWKS.
 Al aceptar: trim, mayúsculas, sin guiones y equivalencias Crockford (O→0, I/L→1), para tolerar
 códigos dictados o copiados a mano. Invitación a un hogar sin miembros activos → 404 (nadie entra
 como MEMBER en un hogar sin OWNER).
+
+## D-028 · Un expulsado no puede reutilizar una invitación anterior a su expulsión — Aceptada (Fase 1)
+**Contexto:** QA detectó que un miembro expulsado volvía a entrar con la misma invitación
+ilimitada que ya había usado (vive 7 días por defecto), lo que vaciaba de efecto la expulsión.
+**Decisión:** `memberships.removed_by` distingue expulsión de abandono (V6). Al aceptar, si el
+usuario fue expulsado **después** de crearse esa invitación → 403 `removed-from-household`. Una
+invitación creada tras la expulsión sí vale (el OWNER le readmite a sabiendas) y quien se fue por
+su cuenta puede volver con la misma.
+**Alternativa descartada:** revocar todas las invitaciones vivas al expulsar (castiga a terceros
+invitados legítimamente).
+
+## D-029 · Errores de tipo en el JSON como `validation-error` por campo — Aceptada (Fase 1)
+Un campo con tipo incorrecto (enum desconocido, texto donde va un número...) devuelve
+`validation-error` con `errors[{field, message}]`, igual que Bean Validation; el cliente pinta el
+error junto al campo. JSON sintácticamente roto o cuerpo ausente sigue siendo `bad-request`.
+Los enums solo se aceptan por nombre (`fail-on-numbers-for-enums`): `{"role":0}` no es OWNER.
+
+## D-030 · Validación estricta de access tokens — Aceptada (Fase 1)
+Además de firma, `iss` y ventana temporal, el decoder exige `exp` presente (Spring ignora un `exp`
+ausente) y `sub` con formato UUID: un token anómalo da 401, nunca 500.
+
+## D-031 · Violaciones de integridad no anticipadas → 409 `data-conflict` — Aceptada (Fase 1)
+Red de seguridad para carreras que el servicio no serializa (p. ej. dos altas simultáneas con
+Google del mismo email). Se registra la restricción en el log pero no se expone al cliente.
+Un fallo al consultar las claves de Google da 503 `google-unavailable`, no 401 ni 500.
+
+## D-032 · Comprobar membresía antes de bloquear la fila del hogar — Aceptada (Fase 1)
+Las operaciones con `SELECT … FOR UPDATE` sobre el hogar verifican antes la membresía sin
+bloqueo (un extraño no puede bloquear hogares ajenos) y la repiten ya con el bloqueo.
+
+## D-033 · Cobertura mínima del 80 % de líneas en `service` y `domain` — Aceptada (Fase 1)
+`jacoco:check` sobre el informe combinado (unitarios + IT) falla la build por debajo del 80 % en
+cualquier paquete `com.hogar.*.service` o `com.hogar.*.domain`. Controllers y configuración se
+cubren con IT pero no cuentan para el umbral: el número que importa es el de la lógica de negocio.
+
+**Deuda conocida:** `GET /api/households` hace N+1 (`countActive` por hogar); aceptable con los
+pocos hogares por usuario esperados, a resolver con una consulta agregada en la Fase 6.

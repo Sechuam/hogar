@@ -11,7 +11,7 @@ en el código; aquí se fija el comportamiento. Cambiar un contrato → avisar a
 | `user_identities` | `id`, `user_id → users`, `provider varchar(20)` (`GOOGLE`), `subject varchar(255)`, `email varchar(254)`, `created_at` | `UNIQUE(provider, subject)`, índice `user_id` |
 | `refresh_tokens` | `id`, `user_id → users`, `family_id uuid`, `token_hash char(64)` (SHA-256 hex), `created_at`, `expires_at`, `revoked_at NULL`, `replaced_by_id uuid NULL` | `UNIQUE(token_hash)`, índices `user_id`, `family_id` |
 | `households` | `id`, `name varchar(100)`, `split_policy varchar(20)` (`EQUAL`/`PROPORTIONAL`, def. `EQUAL`), `plan varchar(20)` (`FREE`/`PREMIUM`, def. `FREE`), `currency char(3)` (def. `EUR`), `created_at`, `updated_at`, `version` | `CHECK` en enums |
-| `memberships` | `id`, `household_id → households`, `user_id → users`, `role varchar(20)` (`OWNER`/`MEMBER`), `joined_at`, `left_at NULL` | **único parcial** `(household_id, user_id) WHERE left_at IS NULL`; índices `user_id`, `household_id` |
+| `memberships` | `id`, `household_id → households`, `user_id → users`, `role varchar(20)` (`OWNER`/`MEMBER`), `joined_at`, `left_at NULL`, `removed_by NULL → users` (V6) | **único parcial** `(household_id, user_id) WHERE left_at IS NULL`; índices `user_id`, `household_id` |
 | `invitations` | `id`, `household_id → households`, `code varchar(16)`, `created_by uuid → users`, `created_at`, `expires_at`, `max_uses int NULL`, `uses int def 0`, `revoked_at NULL` | `UNIQUE(code)`, índice `household_id`, `CHECK(uses >= 0)` |
 
 - Las membresías **no se borran**: al abandonar/expulsar se rellena `left_at` (los gastos e
@@ -56,13 +56,23 @@ Todos autenticados. `{id}` de un hogar donde no eres miembro activo → **404 `h
 | `PATCH /api/households/{id}` | OWNER | `UpdateHouseholdRequest` → 200 | 403 `owner-role-required` |
 | `GET /api/households/{id}/members` | miembro | → 200 `List<MemberResponse>` | ordenados por `joinedAt` |
 | `PATCH /api/households/{id}/members/{userId}` | OWNER | `UpdateMemberRoleRequest` → 200 `MemberResponse` | 422 `last-owner` si dejaría el hogar sin OWNER; 404 `member-not-found` |
-| `DELETE /api/households/{id}/members/{userId}` | OWNER | → 204 | expulsar; no a uno mismo (usar leave) → 422 `use-leave-endpoint` |
+| `DELETE /api/households/{id}/members/{userId}` | OWNER | → 204 | expulsar (queda registrado quién expulsó); no a uno mismo → 422 `use-leave-endpoint`; 404 `member-not-found` |
 | `POST /api/households/{id}/leave` | miembro | → 204 | 422 `last-owner` si es el último OWNER y quedan más miembros (debe ceder el rol); si es el único miembro puede salir y el hogar queda sin miembros activos |
 | `POST /api/households/{id}/invitations` | OWNER | `CreateInvitationRequest` (opcional) → 201 `InvitationResponse` | código aleatorio de 10 caracteres (alfabeto Crockford Base32, `SecureRandom`) |
 | `GET /api/households/{id}/invitations` | OWNER | → 200 `List<InvitationResponse>` | |
-| `DELETE /api/households/{id}/invitations/{invitationId}` | OWNER | → 204 | revoca (idempotente) |
-| `POST /api/invitations/{code}/accept` | autenticado | → 200 `HouseholdResponse` | código normalizado (mayúsculas, sin guiones, O→0, I/L→1); 404 `invitation-not-found` (inexistente, revocada u hogar sin miembros), 422 `invitation-expired`, 422 `invitation-exhausted`, 409 `already-member`; se une como MEMBER |
+| `DELETE /api/households/{id}/invitations/{invitationId}` | OWNER | → 204 | revoca (idempotente); 404 `invitation-not-found` si no es de este hogar |
+| `POST /api/invitations/{code}/accept` | autenticado | → 200 `HouseholdResponse` | código normalizado (mayúsculas, sin guiones, O→0, I/L→1); 404 `invitation-not-found` (inexistente, revocada u hogar sin miembros), 422 `invitation-expired`, 422 `invitation-exhausted`, 409 `already-member`, 403 `removed-from-household` (expulsado después de crearse esa invitación, D-028); se une como MEMBER |
 
 - `MembershipGuard` (en `shared.security`) lo implementa `household.service`.
 - Contrato `user.service.UserDirectory` (lo implementa el coordinador) para nombres de miembros.
 - Usar siempre el `Clock` inyectado.
+
+## 4. Errores transversales
+
+- Cuerpo con JSON roto → 400 `bad-request`; campo con tipo incorrecto o enum desconocido (también
+  numérico) → 400 `validation-error` con `errors[]`.
+- UUID mal formado en la ruta → 400 `bad-request`.
+- Restricción de BD violada en una carrera → 409 `data-conflict`.
+- Access token sin `exp`, con `sub` no UUID, otra clave, `alg: none` u otro `iss` → 401 `unauthorized`.
+- JWKS de Google inaccesible → 503 `google-unavailable`.
+- Rate limit: además del cupo IP + email, cupo por IP (`ip-capacity`) en registro y login.
