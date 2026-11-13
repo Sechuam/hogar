@@ -5,7 +5,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.hogar.household.domain.SplitPolicy;
 import com.hogar.support.TestUsers.TestUser;
 import java.util.UUID;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -65,8 +64,6 @@ class FinanceRobustnessIT extends FinanceApiSupport {
         assertDbMoneyInvariant(c.id());
     }
 
-    @Disabled("BUG: una fecha como número JSON (20260101) se acepta como epochDay de Jackson y crea un gasto con"
-            + " fecha +57440-04-10 (201) en lugar de 400 validation-error")
     @Test
     void numericDatesAreRejected() {
         Couple c = couple();
@@ -99,9 +96,6 @@ class FinanceRobustnessIT extends FinanceApiSupport {
                 "\"2026-03-01\"")), "description");
     }
 
-    @Disabled("BUG: un texto con U+0000 llega a PostgreSQL (SQLState 22021), se clasifica como"
-            + " DataIntegrityViolationException y responde 409 data-conflict (y un WARN con el error de BD) en vez de"
-            + " 400 validation-error del campo")
     @Test
     void nulCharacterInTextIsAValidationErrorOfThatField() {
         Couple c = couple();

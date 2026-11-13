@@ -2,6 +2,7 @@ package com.hogar.expense.repository;
 
 import com.hogar.expense.domain.ExpenseCategory;
 import com.hogar.expense.domain.SharedExpense;
+import jakarta.persistence.LockModeType;
 import jakarta.persistence.criteria.Predicate;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -16,6 +17,8 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
 
 /**
  * Gastos comunes. Las partes ({@code shares}) se cargan con un {@code JOIN FETCH} en el detalle y
@@ -32,6 +35,15 @@ public interface SharedExpenseRepository
     /** Gasto con sus partes, solo si pertenece al hogar (si no, 404 sin filtrar existencia). */
     @EntityGraph(attributePaths = "shares")
     Optional<SharedExpense> findByIdAndHouseholdId(UUID id, UUID householdId);
+
+    /**
+     * Gasto bloqueado ({@code SELECT … FOR UPDATE}) para editarlo o borrarlo. Sin fetch de las
+     * partes: PostgreSQL no permite {@code FOR UPDATE} sobre el lado nullable de un outer join, y
+     * bloquear la raíz del agregado basta para serializar las escrituras concurrentes (D-044).
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select e from SharedExpense e where e.id = :id and e.householdId = :householdId")
+    Optional<SharedExpense> findForUpdate(UUID id, UUID householdId);
 
     /**
      * Gastos del hogar paginados y ordenados por {@link #SEARCH_ORDER} (el orden del {@code pageable}

@@ -21,7 +21,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
@@ -37,10 +36,6 @@ class ExpenseConcurrencyIT extends FinanceApiSupport {
 
     private static final LocalDate JUNE = LocalDate.of(2026, 6, 10);
     private static final int ROUNDS = 15;
-
-    static final String DEADLOCK_BUG = "BUG: dos PUT/DELETE simultáneos sobre el mismo gasto provocan un deadlock en"
-            + " PostgreSQL (40P01: partes y fila del gasto se bloquean en distinto orden durante el flush) que llega"
-            + " como CannotAcquireLockException → 500 internal-error en vez de 409 concurrent-modification";
 
     private record Trio(UUID id, TestUser ana, TestUser luis, TestUser eva) {
     }
@@ -81,7 +76,6 @@ class ExpenseConcurrencyIT extends FinanceApiSupport {
         assertProblem(r, HttpStatus.CONFLICT, "concurrent-modification");
     }
 
-    @Disabled(DEADLOCK_BUG)
     @Test
     void twoSimultaneousRecalculatingEditsGiveOkAndConflictOrSerialiseWithoutBreakingTheInvariant()
             throws Exception {
@@ -114,8 +108,7 @@ class ExpenseConcurrencyIT extends FinanceApiSupport {
     }
 
     /**
-     * Mientras el deadlock siga dando 500 (ver {@link #DEADLOCK_BUG}), al menos se garantiza que la
-     * transacción perdedora se deshace entera: ninguna carrera deja partes duplicadas, huérfanas o que
+     * Regresión del deadlock de QA (D-044): ninguna carrera deja partes duplicadas, huérfanas o que
      * no sumen el importe.
      */
     @Test
@@ -160,7 +153,6 @@ class ExpenseConcurrencyIT extends FinanceApiSupport {
         assertDbMoneyInvariant(t.id());
     }
 
-    @Disabled(DEADLOCK_BUG)
     @Test
     void simultaneousEditAndDeleteNeverFailWithServerError() throws Exception {
         Trio t = trio(SplitPolicy.EQUAL);

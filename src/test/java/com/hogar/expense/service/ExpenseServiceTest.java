@@ -106,6 +106,8 @@ class ExpenseServiceTest {
                 SplitCalculator.split(new BigDecimal("90.00"), SplitPolicy.EQUAL, participants),
                 NOW.minusSeconds(60));
         lenient().when(expenses.findByIdAndHouseholdId(expense.getId(), householdId)).thenReturn(Optional.of(expense));
+        // Editar y borrar cargan con bloqueo de fila (D-044).
+        lenient().when(expenses.findForUpdate(expense.getId(), householdId)).thenReturn(Optional.of(expense));
         return expense;
     }
 

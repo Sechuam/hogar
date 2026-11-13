@@ -104,7 +104,7 @@ public class ExpenseService {
     @Transactional
     public ExpenseResponse update(UUID householdId, UUID userId, UUID expenseId, ExpenseRequest request) {
         guard.requireMember(householdId, userId);
-        SharedExpense expense = load(householdId, expenseId);
+        SharedExpense expense = loadForUpdate(householdId, expenseId);
         HouseholdSplitInfo info = households.getSplitInfo(householdId);
         requireCanModify(expense, info, userId);
 
@@ -130,7 +130,7 @@ public class ExpenseService {
     @Transactional
     public void delete(UUID householdId, UUID userId, UUID expenseId) {
         guard.requireMember(householdId, userId);
-        SharedExpense expense = load(householdId, expenseId);
+        SharedExpense expense = loadForUpdate(householdId, expenseId);
         requireCanModify(expense, households.getSplitInfo(householdId), userId);
         expenses.delete(expense);
     }
@@ -163,6 +163,12 @@ public class ExpenseService {
             throw new ForbiddenException(EXPENSE_EDIT_FORBIDDEN,
                     "Solo quien pagó o registró el gasto, o un OWNER, puede modificarlo.");
         }
+    }
+
+    /** Bloquea la fila del gasto: dos escrituras concurrentes se serializan en vez de interbloquearse (D-044). */
+    private SharedExpense loadForUpdate(UUID householdId, UUID expenseId) {
+        return expenses.findForUpdate(expenseId, householdId)
+                .orElseThrow(() -> new NotFoundException(EXPENSE_NOT_FOUND, "El gasto no existe."));
     }
 
     private SharedExpense load(UUID householdId, UUID expenseId) {
