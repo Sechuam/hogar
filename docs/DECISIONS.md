@@ -67,3 +67,134 @@ Determinista, justo (nadie recibe más de 1 céntimo extra) y garantiza `Σ shar
 ## D-012 · Repositorio solo local por ahora — Provisional (Fase 0)
 Git local con rama por fase. Crear el repositorio remoto en GitHub y publicar queda a decisión
 del propietario (el workflow de CI ya está listo para cuando se suba).
+
+---
+
+## D-013 · JWT propio HS256 con secreto por entorno — Aceptada (Fase 1)
+**Decisión:** access tokens firmados con HMAC-SHA256 (`NimbusJwtEncoder`/`Decoder` de Spring
+Security), secreto Base64 ≥ 32 bytes en `JWT_SECRET`; la app no arranca si falta o es corto.
+Vida 15 min. El resource server de Spring valida firma, `iss` y `exp`.
+**Alternativas:** RS256 con par de claves (necesario si otros servicios verificaran tokens sin
+poder firmarlos; aquí emisor y verificador son el mismo proceso); Keycloak/Auth0 (más
+infraestructura de la que este proyecto necesita y oculta lo que se quiere demostrar).
+**Consecuencias:** rotar el secreto invalida todos los access tokens (aceptable: duran 15 min y
+los refresh tokens son opacos e independientes del secreto).
+
+## D-014 · `updated_at` explícito en los métodos de dominio — Aceptada (Fase 1)
+Cada método que modifica una entidad recibe `Instant now` (del `Clock` inyectado) y actualiza
+`updated_at`. `@UpdateTimestamp`/`@PreUpdate` usan el reloj del sistema y saltan el `Clock`,
+lo que impide tests deterministas.
+
+## D-015 · IDs asignados en la aplicación sin `merge` innecesario — Aceptada (Fase 1)
+UUID generados al crear la entidad. Para que `save()` haga `persist` (y no `merge` con SELECT
+previo), las entidades con `@Version` usan `version == null` como "nueva" y las demás implementan
+`Persistable<UUID>` con un flag transitorio que se apaga en `@PostLoad`/`@PostPersist`.
+
+## D-016 · Membresías con baja lógica (`left_at`) — Aceptada (Fase 1)
+Abandonar o ser expulsado rellena `left_at` en vez de borrar la fila: gastos, repartos e
+historial de tareas seguirán referenciando a ese usuario. Un índice único parcial
+`(household_id, user_id) WHERE left_at IS NULL` garantiza una sola membresía activa y permite
+volver a unirse.
+
+## D-017 · Agregados referenciados por UUID también dentro de una feature — Aceptada (Fase 1)
+Solo `User → UserIdentity` es asociación JPA (mismo agregado). `Membership`, `Invitation` y
+`RefreshToken` guardan UUIDs: sin cargas perezosas accidentales ni ciclos, y cada agregado se
+modifica en su propia transacción.
+
+## D-018 · Invariantes críticas duplicadas en BD — Aceptada (Fase 1)
+`CHECK` de email en minúsculas, `uses <= max_uses`, coherencia de fechas, valores de enums.
+La aplicación es la primera barrera; la BD es la red de seguridad ante bugs o carreras.
+
+## D-019 · Último OWNER y aceptación de invitaciones serializados con bloqueo de fila — Aceptada (Fase 1)
+Cambios de rol/abandono bloquean la fila del hogar (`PESSIMISTIC_WRITE`) y aceptar una invitación
+bloquea la invitación. Son operaciones poco frecuentes: un bloqueo pesimista breve es más simple
+y correcto que reintentos optimistas.
+
+## D-020 · Códigos de invitación en claro — Aceptada (Fase 1)
+10 caracteres Crockford Base32 (~50 bits, `SecureRandom`), con caducidad, usos máximos y
+revocación. Se guardan en claro porque el OWNER necesita volver a verlos para compartirlos; su
+vida corta y la posibilidad de revocarlos acotan el riesgo. Aceptar exige estar autenticado.
+
+## D-021 · Vincular Google a una cuenta no verificada elimina su contraseña — Aceptada (Fase 1)
+**Contexto:** el registro con contraseña no verifica el email. Un atacante podría registrarse con
+el email de la víctima; cuando esta entrase con Google se vincularía a esa cuenta y el atacante
+conservaría la contraseña (*account pre-hijacking*).
+**Decisión:** al vincular Google a una cuenta existente con email **no verificado**, se elimina su
+contraseña y se revocan todas sus sesiones (refresh tokens). Si el email ya estaba verificado, se
+vincula sin más.
+**Alternativas:** rechazar la vinculación (deja al dueño legítimo sin acceso a su email);
+verificación de email por correo antes de nada (correcto, pero requiere envío de emails: Fase 7).
+**Consecuencias:** quien se registró con contraseña y luego usa Google con el mismo email pierde
+el acceso por contraseña (sigue entrando con Google). Cuando exista verificación de email, este
+caso solo afectará a cuentas sin verificar.
+
+## D-022 · Reutilización de refresh token revoca la familia, aunque sea un reintento legítimo — Aceptada (Fase 1)
+Rotación con `SELECT … FOR UPDATE`: dos refresh simultáneos del mismo token se serializan y el
+segundo cuenta como reutilización. Se prioriza detectar robo de tokens sobre la comodidad: un
+cliente que reintenta tras un timeout tendrá que volver a iniciar sesión. Revocación confirmada
+pese al 401 (`noRollbackFor`). Token caducado → 401 sin revocar la familia.
+
+## D-023 · Rate limiting en memoria con Bucket4j — Aceptada (Fase 1)
+`capacity` intentos por `refill-period` con recarga gradual, por IP + email (Google: solo IP),
+y además un cupo mayor solo por IP (`ip-capacity`) en registro y login, para que rotar emails desde
+una misma IP no esquive el límite (enumeración, *password spraying*). `Retry-After` en el 429. Buckets en Caffeine acotada. La IP sale de `getRemoteAddr()`: tras un
+proxy habrá que configurar `server.forward-headers-strategy` (nunca leer `X-Forwarded-For` a mano).
+**Limitación:** por instancia; con varias réplicas, pasar a Bucket4j sobre Redis/PostgreSQL.
+
+## D-024 · Login sin oráculo de existencia de email — Aceptada (Fase 1)
+Email inexistente, usuario solo-Google o contraseña errónea → mismo 401 `invalid-credentials` y
+mismo coste (BCrypt contra un hash "dummy"). El registro sí devuelve 409 si el email existe: es
+inevitable en un registro sin verificación por correo y el rate limiting acota la enumeración.
+
+## D-025 · La feature auth no toca entidades de user — Aceptada (Fase 1)
+`auth` solo emite y rota tokens; las cuentas se gestionan vía la interfaz pública
+`user.service.UserAccounts` (devuelve DTOs). Lo impone ArchUnit.
+
+## D-026 · Verificación de Google ID token con `NimbusJwtDecoder` — Aceptada (Fase 1)
+Decoder propio (`@Qualifier("googleIdTokenDecoder")`, nunca `@Primary`) contra el JWKS de Google:
+firma RS256, `exp`/`iat` con el `Clock`, `iss` ∈ {`accounts.google.com`, `https://accounts.google.com`},
+`aud` ∩ `GOOGLE_CLIENT_IDS`. Sin la librería `google-api-client`: Spring Security ya trae lo
+necesario. La verificación va fuera de transacción para no retener conexiones mientras se
+descarga el JWKS.
+
+## D-027 · Normalización de códigos de invitación — Aceptada (Fase 1)
+Al aceptar: trim, mayúsculas, sin guiones y equivalencias Crockford (O→0, I/L→1), para tolerar
+códigos dictados o copiados a mano. Invitación a un hogar sin miembros activos → 404 (nadie entra
+como MEMBER en un hogar sin OWNER).
+
+## D-028 · Un expulsado no puede reutilizar una invitación anterior a su expulsión — Aceptada (Fase 1)
+**Contexto:** QA detectó que un miembro expulsado volvía a entrar con la misma invitación
+ilimitada que ya había usado (vive 7 días por defecto), lo que vaciaba de efecto la expulsión.
+**Decisión:** `memberships.removed_by` distingue expulsión de abandono (V6). Al aceptar, si el
+usuario fue expulsado **después** de crearse esa invitación → 403 `removed-from-household`. Una
+invitación creada tras la expulsión sí vale (el OWNER le readmite a sabiendas) y quien se fue por
+su cuenta puede volver con la misma.
+**Alternativa descartada:** revocar todas las invitaciones vivas al expulsar (castiga a terceros
+invitados legítimamente).
+
+## D-029 · Errores de tipo en el JSON como `validation-error` por campo — Aceptada (Fase 1)
+Un campo con tipo incorrecto (enum desconocido, texto donde va un número...) devuelve
+`validation-error` con `errors[{field, message}]`, igual que Bean Validation; el cliente pinta el
+error junto al campo. JSON sintácticamente roto o cuerpo ausente sigue siendo `bad-request`.
+Los enums solo se aceptan por nombre (`fail-on-numbers-for-enums`): `{"role":0}` no es OWNER.
+
+## D-030 · Validación estricta de access tokens — Aceptada (Fase 1)
+Además de firma, `iss` y ventana temporal, el decoder exige `exp` presente (Spring ignora un `exp`
+ausente) y `sub` con formato UUID: un token anómalo da 401, nunca 500.
+
+## D-031 · Violaciones de integridad no anticipadas → 409 `data-conflict` — Aceptada (Fase 1)
+Red de seguridad para carreras que el servicio no serializa (p. ej. dos altas simultáneas con
+Google del mismo email). Se registra la restricción en el log pero no se expone al cliente.
+Un fallo al consultar las claves de Google da 503 `google-unavailable`, no 401 ni 500.
+
+## D-032 · Comprobar membresía antes de bloquear la fila del hogar — Aceptada (Fase 1)
+Las operaciones con `SELECT … FOR UPDATE` sobre el hogar verifican antes la membresía sin
+bloqueo (un extraño no puede bloquear hogares ajenos) y la repiten ya con el bloqueo.
+
+## D-033 · Cobertura mínima del 80 % de líneas en `service` y `domain` — Aceptada (Fase 1)
+`jacoco:check` sobre el informe combinado (unitarios + IT) falla la build por debajo del 80 % en
+cualquier paquete `com.hogar.*.service` o `com.hogar.*.domain`. Controllers y configuración se
+cubren con IT pero no cuentan para el umbral: el número que importa es el de la lógica de negocio.
+
+**Deuda conocida:** `GET /api/households` hace N+1 (`countActive` por hogar); aceptable con los
+pocos hogares por usuario esperados, a resolver con una consulta agregada en la Fase 6.

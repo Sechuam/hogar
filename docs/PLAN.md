@@ -29,7 +29,7 @@ Cada fase: rama `fase-N-<nombre>`, commits pequeños, merge a `main` al cerrar y
 
 ---
 
-## Fase 1 — Datos + autenticación ⬜
+## Fase 1 — Datos + autenticación ✅
 **Rama:** `fase-1-auth`
 
 **Contratos primero (coordinador):** `CurrentUser`, `MembershipGuard`
@@ -54,6 +54,10 @@ Cada fase: rama `fase-N-<nombre>`, commits pequeños, merge a `main` al cerrar y
 
 **Hecho cuando:** todos los endpoints con IT, tests de token caducado/manipulado/reusado,
 vinculación Google, invitación caducada/revocada.
+
+**Resultado:** 130 tests unitarios + 209 IT en verde; cobertura de líneas ≥ 92 % en todos los
+paquetes `service`/`domain` (umbral 80 % activo). Contrato final en `docs/api/fase-1-contratos.md`;
+decisiones D-013 a D-033.
 
 ---
 

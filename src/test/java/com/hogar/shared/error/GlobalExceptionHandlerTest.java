@@ -3,6 +3,7 @@ package com.hogar.shared.error;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -58,6 +59,14 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void tooManyRequestsAddsRetryAfterHeader() throws Exception {
+        mvc.perform(get("/fake/too-many"))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(header().string("Retry-After", "42"))
+                .andExpect(jsonPath("$.code").value("rate-limited"));
+    }
+
+    @Test
     void optimisticLockBecomes409() throws Exception {
         mvc.perform(get("/fake/optimistic-lock"))
                 .andExpect(status().isConflict())
@@ -83,6 +92,25 @@ class GlobalExceptionHandlerTest {
                         .content("{not json"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("bad-request"));
+    }
+
+    @Test
+    void wrongJsonTypeIsValidationErrorOfThatField() throws Exception {
+        mvc.perform(post("/fake/validate")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"ok\",\"amount\":\"mucho\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("validation-error"))
+                .andExpect(jsonPath("$.errors[0].field").value("amount"));
+    }
+
+    @Test
+    void unanticipatedConstraintViolationIs409WithoutInternals() throws Exception {
+        mvc.perform(get("/fake/integrity"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("data-conflict"))
+                .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("uk_"))));
     }
 
     @Test
@@ -119,6 +147,11 @@ class GlobalExceptionHandlerTest {
             throw new ConflictException("email-already-registered", "El email ya está registrado");
         }
 
+        @GetMapping("/fake/too-many")
+        void tooMany() {
+            throw new TooManyRequestsException("rate-limited", "Demasiados intentos", 42);
+        }
+
         @GetMapping("/fake/optimistic-lock")
         void optimisticLock() {
             throw new OptimisticLockingFailureException("version mismatch");
@@ -126,6 +159,11 @@ class GlobalExceptionHandlerTest {
 
         @PostMapping("/fake/validate")
         void validate(@Valid @RequestBody FakeRequest request) {
+        }
+
+        @GetMapping("/fake/integrity")
+        void integrity() {
+            throw new org.springframework.dao.DataIntegrityViolationException("duplicate key uk_users_email");
         }
 
         @GetMapping("/fake/boom")
