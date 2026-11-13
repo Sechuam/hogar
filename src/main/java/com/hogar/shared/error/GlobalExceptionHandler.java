@@ -1,14 +1,18 @@
 package com.hogar.shared.error;
 
 import java.net.URI;
+import java.sql.SQLException;
 import java.util.List;
+import org.hibernate.exception.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.exc.MismatchedInputException;
 import java.util.stream.Collectors;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.ConcurrencyFailureException;
 import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -46,8 +50,12 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return response.body(problem);
     }
 
-    @ExceptionHandler(OptimisticLockingFailureException.class)
-    ProblemDetail handleOptimisticLock(OptimisticLockingFailureException ex) {
+    /**
+     * Versión obsoleta (bloqueo optimista) o bloqueo/deadlock de BD al competir dos escrituras:
+     * en ambos casos el cliente puede reintentar sobre el estado actual.
+     */
+    @ExceptionHandler({OptimisticLockingFailureException.class, PessimisticLockingFailureException.class})
+    ProblemDetail handleConcurrentModification(ConcurrencyFailureException ex) {
         return Problems.of(HttpStatus.CONFLICT, "concurrent-modification", "Conflict",
                 "El recurso ha sido modificado por otra petición. Vuelve a cargarlo e inténtalo de nuevo.");
     }
@@ -59,9 +67,30 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
      */
     @ExceptionHandler(DataIntegrityViolationException.class)
     ProblemDetail handleDataIntegrity(DataIntegrityViolationException ex) {
-        log.warn("Violación de integridad no anticipada: {}", ex.getMostSpecificCause().getMessage());
+        // Solo SQLState y restricción: el mensaje de PostgreSQL ("Failing row contains (...)",
+        // "Key (email)=(...)") puede contener datos personales.
+        log.warn("Violación de integridad no anticipada: sqlState={}, constraint={}",
+                sqlState(ex), constraintName(ex));
         return Problems.of(HttpStatus.CONFLICT, "data-conflict", "Conflict",
                 "La operación entra en conflicto con el estado actual de los datos.");
+    }
+
+    private static String sqlState(Throwable ex) {
+        for (Throwable t = ex; t != null; t = t.getCause()) {
+            if (t instanceof SQLException sql) {
+                return sql.getSQLState();
+            }
+        }
+        return "?";
+    }
+
+    private static String constraintName(Throwable ex) {
+        for (Throwable t = ex; t != null; t = t.getCause()) {
+            if (t instanceof ConstraintViolationException cve) {
+                return cve.getConstraintName();
+            }
+        }
+        return "?";
     }
 
     @ExceptionHandler(AccessDeniedException.class)

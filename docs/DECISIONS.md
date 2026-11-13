@@ -48,11 +48,11 @@ apuntaría a una BD muerta. Los IT se ejecutan con Failsafe (`*IT`) en `verify`.
 Un campo `currency` (ISO-4217) en el hogar; no se mezclan monedas dentro de un hogar.
 Multi-moneda queda fuera de alcance.
 
-## D-009 · PROPORTIONAL con ingreso 0 de un miembro — Provisional (Fase 0)
+## D-009 · PROPORTIONAL con ingreso 0 de un miembro — Aceptada (confirmada antes de la Fase 2)
 **Decisión:** el reparto es literal: quien tiene 0 € de ingresos en el mes paga 0 €. Solo se
 cae a EQUAL (con warning) cuando la **suma** de ingresos del hogar en ese mes es 0.
-**Alternativa:** caer a EQUAL si cualquier miembro tiene ingreso 0. Pendiente de validar con
-el product owner antes de la Fase 2.
+**Alternativa descartada:** caer a EQUAL si cualquier miembro tiene ingreso 0 (desvirtúa la
+política: quien elige PROPORTIONAL acepta que quien no ingresa no aporte ese mes).
 
 ## D-010 · Ingresos recurrentes = mensuales — Provisional (Fase 0)
 Un ingreso recurrente cuenta en cada mes natural entre `startDate` y `endDate` (opcional).
@@ -198,3 +198,82 @@ cubren con IT pero no cuentan para el umbral: el número que importa es el de la
 
 **Deuda conocida:** `GET /api/households` hace N+1 (`countActive` por hogar); aceptable con los
 pocos hogares por usuario esperados, a resolver con una consulta agregada en la Fase 6.
+
+---
+
+## D-034 · Participan en un gasto los miembros activos al crearlo o recalcularlo — Aceptada (Fase 2)
+Un gasto se reparte entre los miembros activos en el momento de registrarlo, aunque su fecha sea
+anterior. Reconstruir quién era miembro en una fecha pasada complica el modelo y sorprende al
+usuario ("lo apunto hoy y lo pago con quien vive hoy"). Elegir participantes concretos por gasto
+queda como mejora futura.
+
+## D-035 · Los enums de dominio son lenguaje publicado entre features — Aceptada (Fase 2)
+`SplitPolicy` es el mismo concepto en `household` y en `expense`. Duplicarlo obligaría a mapear
+por nombre sin aportar aislamiento real. ArchUnit permite depender de **enums** del `domain` de
+otra feature; entidades, repositorios y servicios internos siguen prohibidos.
+
+## D-036 · Paginación con `PageResponse` propio — Aceptada (Fase 2)
+`PageResponse(content, page, size, totalElements, totalPages)` en lugar de serializar `Page` de
+Spring Data, cuyo JSON no es un contrato estable. `size` máximo 100.
+
+## D-037 · El reparto se calcula en céntimos con aritmética exacta — Aceptada (Fase 2)
+`SplitCalculator` trabaja en céntimos (`BigInteger`/`BigDecimal` sin divisiones inexactas) y
+asigna el sobrante por mayor resto con desempate por antigüedad en el hogar y `userId`. La suma
+de las partes es el total por construcción, y además se comprueba en código. Se guarda el `weight`
+de cada parte (ingreso usado o 1) para poder explicar el reparto después.
+
+## D-038 · Unicidad de shares diferida al commit — Aceptada (Fase 2)
+Hibernate inserta los hijos nuevos antes de borrar los huérfanos (HHH-2801): recalcular un reparto
+con los mismos miembros violaba `UNIQUE(expense_id, user_id)` a mitad de flush. La restricción es
+`DEFERRABLE INITIALLY DEFERRED`: se comprueba sobre el estado final de la transacción.
+
+## D-039 · Filtros opcionales con `Specification` — Aceptada (Fase 2)
+`(:p is null or …)` en JPQL con UUID/fechas nulas provoca errores de tipo en PostgreSQL. Los
+listados filtrables usan `Specification` encapsuladas en métodos `default` del repositorio
+(`search(...)`), con orden total fijo (fecha, `createdAt`, `id`) para que la paginación no
+duplique ni pierda filas.
+
+## D-040 · Listados de gastos sin fetch join + `@BatchSize` — Aceptada (Fase 2)
+Paginar con fetch de colección obliga a Hibernate a paginar en memoria (HHH90003004). Se pagina en
+SQL y las shares de toda la página llegan en una sola consulta `IN` (`@BatchSize(100)`, igual al
+tamaño máximo de página). El detalle usa `@EntityGraph`.
+
+## D-041 · `LargestRemainder` compartido en `shared.money` — Aceptada (Fase 2)
+Mismo algoritmo (mayor resto exacto en enteros) para repartir gastos y para los porcentajes del
+resumen de ingresos; vive en `shared` porque lo usan dos features. El desempate por `userId`
+compara el UUID como texto (mismo orden que `uuid` en PostgreSQL; `UUID.compareTo` compara con signo).
+
+## D-042 · `paidBy` nulo al editar conserva el pagador actual — Aceptada (Fase 2)
+Al crear, `paidBy` nulo = el usuario autenticado. Al editar (PUT), `paidBy` nulo **conserva** el
+pagador: si significara "quien edita", un OWNER que corrige la descripción se convertiría en
+pagador y el reparto se recalcularía por sorpresa. El pagador solo se valida si cambia, para poder
+seguir editando gastos de alguien que ya dejó el hogar.
+
+## D-043 · Paginación fuera de rango → 400, no se acota — Aceptada (Fase 2)
+`size` > 100, `size` < 1 o `page` < 0 devuelven 400: acotar en silencio haría creer al cliente
+que ha recibido todo. `from > to` → 400 `invalid-date-range` (`BadRequestException` compartida).
+
+## D-044 · Editar o borrar un gasto bloquea su fila — Aceptada (Fase 2)
+**Contexto:** QA reprodujo deadlocks (40P01) con dos PUT, o PUT + DELETE, simultáneos sobre el
+mismo gasto: durante el flush, las partes (borrado de huérfanas e inserción) y la fila del gasto
+se bloqueaban en distinto orden en cada transacción → 500.
+**Decisión:** `update` y `delete` cargan la raíz con `SELECT … FOR UPDATE` (sin fetch de partes:
+PostgreSQL no permite `FOR UPDATE` sobre el lado nullable de un outer join). Las escrituras sobre
+un mismo gasto se serializan; la segunda ve el estado ya confirmado. Como red de seguridad,
+`PessimisticLockingFailureException` (bloqueo/deadlock) → 409 `concurrent-modification`, igual
+que el bloqueo optimista.
+
+## D-045 · Entrada JSON estricta — Aceptada (Fase 2)
+Ningún texto puede contener U+0000 (PostgreSQL no lo almacena: acababa en error de BD) y
+`LocalDate` solo se acepta como texto ISO-8601 (un número se interpretaba como *epoch day*). Ambos
+casos son `validation-error` del campo. Se configura una vez en `JacksonConfig` para toda la API.
+
+## D-046 · Los errores de BD se registran sin datos — Aceptada (Fase 2)
+Ante una violación de integridad se registran solo `SQLState` y nombre de la restricción: el
+mensaje de PostgreSQL ("Failing row contains (...)", "Key (email)=(...)") puede incluir datos
+personales.
+
+**Deuda conocida (Fase 2):** las fechas de gastos e ingresos no tienen rango (se admite el año
+9999); `GET /incomes` muestra también ingresos de ex-miembros (no cuentan en el reparto ni en el
+resumen); una baja de miembro simultánea a un alta de gasto en la que es pagador no está
+serializada; si un ex-miembro vuelve, sus ingresos recurrentes antiguos vuelven a contar.

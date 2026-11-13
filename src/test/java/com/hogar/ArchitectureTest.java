@@ -27,7 +27,11 @@ class ArchitectureTest {
 
     private static final Pattern FEATURE_LAYER = Pattern.compile("^com\\.hogar\\.([a-z]+)\\.([a-z]+).*");
     private static final String SHARED = "shared";
-    /** Capas de una feature que otra feature puede usar: su contrato público. */
+    /**
+     * Capas de una feature que otra feature puede usar: su contrato público. Además, los
+     * <b>enums</b> de {@code domain} (p. ej. {@code SplitPolicy}) forman parte del lenguaje
+     * publicado: son valores inmutables sin comportamiento (D-035).
+     */
     private static final Set<String> PUBLIC_LAYERS = Set.of("service", "dto");
 
     @ArchTest
@@ -84,7 +88,8 @@ class ArchitectureTest {
                             continue;
                         }
                         boolean otherFeature = !target.group(1).equals(originFeature.get());
-                        if (otherFeature && !PUBLIC_LAYERS.contains(target.group(2))) {
+                        boolean publishedEnum = "domain".equals(target.group(2)) && dep.getTargetClass().isEnum();
+                        if (otherFeature && !PUBLIC_LAYERS.contains(target.group(2)) && !publishedEnum) {
                             events.add(SimpleConditionEvent.violated(dep, dep.getDescription()));
                         }
                     }
