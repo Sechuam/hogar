@@ -7,23 +7,23 @@ Cada fase: rama `fase-N-<nombre>`, commits pequeños, merge a `main` al cerrar y
 
 ---
 
-## Fase 0 — Setup 🟡
+## Fase 0 — Setup ✅
 **Rama:** `fase-0-setup` · **Ejecuta:** coordinador + `devops-docs`
 
-- [ ] `git init`, `.gitignore`, `.editorconfig`.
-- [ ] Proyecto Spring Boot 3.5.x / Java 21 con Maven Wrapper, paquete base `com.hogar`.
-- [ ] Dependencias base: web, data-jpa, validation, security, oauth2-resource-server,
+- [x] `git init`, `.gitignore`, `.editorconfig`.
+- [x] Proyecto Spring Boot 3.5.x / Java 21 con Maven Wrapper, paquete base `com.hogar`.
+- [x] Dependencias base: web, data-jpa, validation, security, oauth2-resource-server,
       actuator, flyway, postgresql, springdoc, testcontainers, archunit, jacoco.
-- [ ] `application.yml` + perfiles `dev` / `test`; todo secreto por env (`.env.example`).
-- [ ] `docker-compose.yml` (Postgres 17 con healthcheck; servicio `app` opcional) y `Dockerfile` multi-stage.
-- [ ] Migración `V1__baseline.sql` (vacía/extensiones) para fijar Flyway.
-- [ ] `shared/error`: `GlobalExceptionHandler` con ProblemDetail + test.
-- [ ] `AbstractIntegrationTest` (Testcontainers + `@ServiceConnection`) y un IT de humo
+- [x] `application.yml` + perfiles `dev` / `test`; todo secreto por env (`.env.example`).
+- [x] `docker-compose.yml` (Postgres 17 con healthcheck; servicio `app` opcional) y `Dockerfile` multi-stage.
+- [x] Migración `V1__baseline.sql` (vacía/extensiones) para fijar Flyway.
+- [x] `shared/error`: `GlobalExceptionHandler` con ProblemDetail + test.
+- [x] `AbstractIntegrationTest` (Testcontainers + `@ServiceConnection`) y un IT de humo
       (`/actuator/health` = UP, Flyway aplicado).
-- [ ] `ArchitectureTest` (ArchUnit) con las reglas de `CLAUDE.md`.
-- [ ] GitHub Actions: `./mvnw -B verify` en push/PR (Temurin 21, caché Maven).
-- [ ] Subagentes en `.claude/agents/*.md` (los 7 definidos en `CLAUDE.md`).
-- [ ] `docs/DECISIONS.md` inicial y `README.md` esqueleto.
+- [x] `ArchitectureTest` (ArchUnit) con las reglas de `CLAUDE.md`.
+- [x] GitHub Actions: `./mvnw -B verify` en push/PR (Temurin 21, caché Maven).
+- [x] Subagentes en `.claude/agents/*.md` (los 7 definidos en `CLAUDE.md`).
+- [x] `docs/DECISIONS.md` inicial y `README.md` esqueleto.
 
 **Hecho cuando:** `./mvnw verify` verde en local y en CI; `docker compose up` arranca.
 

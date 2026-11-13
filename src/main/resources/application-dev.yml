@@ -1,0 +1,5 @@
+# Perfil de desarrollo local: más logging, nada de secretos.
+logging:
+  level:
+    com.hogar: DEBUG
+    org.hibernate.SQL: DEBUG
