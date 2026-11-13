@@ -1,6 +1,9 @@
 package com.hogar.shared.security;
 
 import com.nimbusds.jose.jwk.source.ImmutableSecret;
+import java.time.Instant;
+import java.util.Objects;
+import java.util.UUID;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -9,6 +12,8 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
+import org.springframework.security.oauth2.jwt.JwtClaimNames;
+import org.springframework.security.oauth2.jwt.JwtClaimValidator;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.JwtValidators;
@@ -43,7 +48,23 @@ class JwtConfig {
                 .macAlgorithm(MacAlgorithm.HS256)
                 .build();
         decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(
-                JwtValidators.createDefaultWithIssuer(props.issuer())));
+                JwtValidators.createDefaultWithIssuer(props.issuer()),
+                // JwtTimestampValidator ignora un exp ausente: sin él, el token no caducaría nunca.
+                new JwtClaimValidator<Instant>(JwtClaimNames.EXP, Objects::nonNull),
+                // El sub es el id del usuario: si no es un UUID el token no es nuestro (401, no 500).
+                new JwtClaimValidator<String>(JwtClaimNames.SUB, JwtConfig::isUuid)));
         return decoder;
+    }
+
+    private static boolean isUuid(String value) {
+        if (value == null) {
+            return false;
+        }
+        try {
+            UUID.fromString(value);
+            return true;
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
     }
 }

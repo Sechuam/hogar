@@ -23,6 +23,10 @@ spring:
   autoconfigure:
     # Sin usuario en memoria con contraseña generada: la autenticación es solo por JWT.
     exclude: org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
+  jackson:
+    deserialization:
+      # {"role": 0} no debe significar OWNER: los enums solo se aceptan por nombre.
+      fail-on-numbers-for-enums: true
   servlet:
     multipart:
       max-file-size: 10MB
@@ -60,6 +64,8 @@ hogar:
       # Intentos por clave (IP + email) en login/registro/google, recargados cada refill-period.
       capacity: 5
       refill-period: 1m
+      # Cupo por IP sumando todos los emails (enumeración / password spraying).
+      ip-capacity: 30
   invitations:
     default-ttl: 7d
     max-ttl: 30d

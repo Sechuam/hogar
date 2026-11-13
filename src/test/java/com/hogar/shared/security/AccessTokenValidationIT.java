@@ -19,7 +19,6 @@ import java.util.Date;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.Consumer;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpEntity;
@@ -106,9 +105,6 @@ class AccessTokenValidationIT extends AbstractIntegrationTest {
         assertUnauthorized(rest.getForEntity("/api/users/me?access_token=" + ana.accessToken(), String.class));
     }
 
-    @Disabled("BUG (baja, endurecimiento): un token bien firmado sin 'exp' no caduca nunca; JwtTimestampValidator "
-            + "solo valida exp si existe. Fix: en shared/security/JwtConfig.jwtDecoder añadir un validador "
-            + "JwtClaimValidator<Instant>(EXP, Objects::nonNull) al DelegatingOAuth2TokenValidator")
     @Test
     void tokenWithoutExpirationIsRejected() throws Exception {
         TestUser ana = users().create("Ana");
@@ -116,19 +112,12 @@ class AccessTokenValidationIT extends AbstractIntegrationTest {
         assertUnauthorized(me(sign(ana.id().toString(), b -> b.expirationTime(null), JWSAlgorithm.HS256, ownKey())));
     }
 
-    @Disabled("BUG (baja): un token bien firmado con 'sub' que no es UUID provoca IllegalArgumentException en "
-            + "CurrentUser.id() → 500. Fix: validar 'sub' como UUID en JwtConfig.jwtDecoder (JwtClaimValidator) "
-            + "para que salga 401")
     @Test
     void tokenWhoseSubjectIsNotAUuidIsRejected() throws Exception {
         assertUnauthorized(me(sign("no-es-uuid", b -> { }, JWSAlgorithm.HS256, ownKey())));
         assertUnauthorized(me(sign(null, b -> { }, JWSAlgorithm.HS256, ownKey())));
     }
 
-    @Disabled("BUG (baja): un token válido de un usuario inexistente llega a los servicios; POST /api/households "
-            + "viola la FK memberships.user_id → DataIntegrityViolationException → 500. Hoy no hay borrado de "
-            + "usuarios, pero lo habrá. Fix: tratar DataIntegrityViolationException en GlobalExceptionHandler "
-            + "(409) y, mejor, comprobar en el decoder/un filtro que el usuario existe (401)")
     @Test
     void tokenOfANonExistentUserNeverCausesServerError() throws Exception {
         String token = sign(UUID.randomUUID().toString(), b -> { }, JWSAlgorithm.HS256, ownKey());

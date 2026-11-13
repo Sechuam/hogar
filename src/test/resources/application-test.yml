@@ -9,3 +9,5 @@ hogar:
     rate-limit:
       capacity: 5
       refill-period: 1m
+      # En los IT todo sale de 127.0.0.1: el cupo por IP se prueba en AuthRateLimiterTest.
+      ip-capacity: 1000000

@@ -23,7 +23,7 @@ class AuthRateLimiterTest {
     @BeforeEach
     void setUp() {
         Ticker ticker = () -> clock.millis() * 1_000_000L;
-        limiter = new AuthRateLimiter(new RateLimitProperties(5, Duration.ofMinutes(1)), clock, ticker);
+        limiter = new AuthRateLimiter(new RateLimitProperties(5, Duration.ofMinutes(1), 8), clock, ticker);
     }
 
     @Test
@@ -51,6 +51,20 @@ class AuthRateLimiterTest {
             limiter.checkLogin("10.0.0.1", "otra@example.com");
             limiter.checkRegister("10.0.0.1", "ana@example.com");
         }).doesNotThrowAnyException();
+    }
+
+    @Test
+    void rotatingEmailsFromOneIpHitsThePerIpLimit() {
+        // ipCapacity = 8: con emails distintos no se agota el cupo IP+email, pero sí el de IP.
+        for (int i = 0; i < 8; i++) {
+            limiter.checkLogin("10.0.0.9", "victima" + i + "@example.com");
+        }
+
+        assertThatThrownBy(() -> limiter.checkLogin("10.0.0.9", "otra@example.com"))
+                .isInstanceOf(TooManyRequestsException.class);
+        assertThatCode(() -> limiter.checkLogin("10.0.0.10", "otra@example.com")).doesNotThrowAnyException();
+        // El registro tiene su propio cupo por IP.
+        assertThatCode(() -> limiter.checkRegister("10.0.0.9", "nueva@example.com")).doesNotThrowAnyException();
     }
 
     @Test

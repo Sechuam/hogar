@@ -1,11 +1,14 @@
 package com.hogar.auth.service;
 
+import com.hogar.shared.error.ServiceUnavailableException;
 import com.hogar.shared.error.UnauthorizedException;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.Collection;
 import java.util.List;
 import java.util.Set;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
 import org.springframework.security.oauth2.core.OAuth2Error;
@@ -14,6 +17,7 @@ import org.springframework.security.oauth2.core.OAuth2TokenValidatorResult;
 import org.springframework.security.oauth2.jwt.BadJwtException;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtException;
 import org.springframework.security.oauth2.jwt.JwtTimestampValidator;
 import org.springframework.stereotype.Component;
 
@@ -24,6 +28,8 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public class NimbusGoogleIdTokenVerifier implements GoogleIdTokenVerifier {
+
+    private static final Logger log = LoggerFactory.getLogger(NimbusGoogleIdTokenVerifier.class);
 
     public static final String DECODER_QUALIFIER = "googleIdTokenDecoder";
 
@@ -64,6 +70,11 @@ public class NimbusGoogleIdTokenVerifier implements GoogleIdTokenVerifier {
         } catch (BadJwtException e) {
             // Firma, formato, iss, aud o exp no válidos. El token nunca se registra.
             throw invalidToken();
+        } catch (JwtException e) {
+            // No se pudo comprobar (p. ej. el JWKS de Google no responde): no es culpa del cliente.
+            log.warn("No se pudo verificar el ID token de Google: {}", e.getMessage());
+            throw new ServiceUnavailableException("google-unavailable",
+                    "No se puede verificar el inicio de sesión con Google en este momento.");
         }
         String subject = jwt.getSubject();
         String email = jwt.getClaimAsString("email");

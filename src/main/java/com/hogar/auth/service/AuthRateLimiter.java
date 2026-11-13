@@ -16,7 +16,8 @@ import org.springframework.stereotype.Service;
 
 /**
  * Rate limiting en memoria (Bucket4j) de los endpoints de autenticación, por clave:
- * IP remota + email normalizado en registro/login, solo IP en Google.
+ * IP remota + email normalizado en registro/login (y además un cupo mayor solo por IP, para que
+ * rotar emails desde una misma IP no esquive el límite), solo IP en Google.
  *
  * <p>Los buckets viven en una caché Caffeine acotada ({@code maximumSize}) que expulsa los que
  * llevan un {@code refillPeriod} sin usarse: para entonces ya estarían llenos, así que olvidarlos
@@ -51,19 +52,21 @@ public class AuthRateLimiter {
     }
 
     public void checkRegister(String remoteIp, String email) {
-        consume("register|" + remoteIp + "|" + normalize(email));
+        consume("register-ip|" + remoteIp, props.ipCapacity());
+        consume("register|" + remoteIp + "|" + normalize(email), props.capacity());
     }
 
     public void checkLogin(String remoteIp, String email) {
-        consume("login|" + remoteIp + "|" + normalize(email));
+        consume("login-ip|" + remoteIp, props.ipCapacity());
+        consume("login|" + remoteIp + "|" + normalize(email), props.capacity());
     }
 
     public void checkGoogle(String remoteIp) {
-        consume("google|" + remoteIp);
+        consume("google|" + remoteIp, props.capacity());
     }
 
-    private void consume(String key) {
-        ConsumptionProbe probe = buckets.get(key, k -> newBucket()).tryConsumeAndReturnRemaining(1);
+    private void consume(String key, int capacity) {
+        ConsumptionProbe probe = buckets.get(key, k -> newBucket(capacity)).tryConsumeAndReturnRemaining(1);
         if (!probe.isConsumed()) {
             long retryAfter = Math.max(1, TimeUnit.NANOSECONDS.toSeconds(probe.getNanosToWaitForRefill() + 999_999_999L));
             throw new TooManyRequestsException(RATE_LIMITED,
@@ -71,9 +74,9 @@ public class AuthRateLimiter {
         }
     }
 
-    private Bucket newBucket() {
+    private Bucket newBucket(int capacity) {
         return Bucket.builder()
-                .addLimit(limit -> limit.capacity(props.capacity()).refillGreedy(props.capacity(), props.refillPeriod()))
+                .addLimit(limit -> limit.capacity(capacity).refillGreedy(capacity, props.refillPeriod()))
                 .withCustomTimePrecision(timeMeter)
                 .build();
     }
