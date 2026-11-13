@@ -1,0 +1,11 @@
+# Perfil de tests. Estos valores NO son secretos: solo sirven para firmar tokens efímeros en tests.
+hogar:
+  security:
+    jwt:
+      # 48 bytes en Base64, exclusivo de tests
+      secret: dGVzdC1vbmx5LXNlY3JldC1ub3QtZm9yLXByb2R1Y3Rpb24tMDEyMzQ1Njc4OWFiY2Q=
+    google:
+      client-ids: test-client-id.apps.googleusercontent.com
+    rate-limit:
+      capacity: 5
+      refill-period: 1m

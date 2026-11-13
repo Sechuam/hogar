@@ -45,6 +45,25 @@ management:
       probes:
         enabled: true
 
+hogar:
+  security:
+    jwt:
+      secret: ${JWT_SECRET:}
+      issuer: hogar-api
+      access-token-ttl: 15m
+      refresh-token-ttl: 30d
+    google:
+      # Client IDs de la app (Android/iOS/Web) aceptados como 'aud' del ID token de Google.
+      client-ids: ${GOOGLE_CLIENT_IDS:}
+      jwk-set-uri: https://www.googleapis.com/oauth2/v3/certs
+    rate-limit:
+      # Intentos por clave (IP + email) en login/registro/google, recargados cada refill-period.
+      capacity: 5
+      refill-period: 1m
+  invitations:
+    default-ttl: 7d
+    max-ttl: 30d
+
 springdoc:
   swagger-ui:
     path: /swagger-ui.html

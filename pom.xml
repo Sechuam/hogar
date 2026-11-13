@@ -22,6 +22,7 @@
         <springdoc.version>2.8.17</springdoc.version>
         <archunit.version>1.4.2</archunit.version>
         <jacoco.version>0.8.14</jacoco.version>
+        <bucket4j.version>8.20.0</bucket4j.version>
     </properties>
 
     <dependencies>
@@ -69,10 +70,26 @@
             <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
         </dependency>
 
+        <!-- Rate limiting (en memoria, buckets acotados con Caffeine) -->
+        <dependency>
+            <groupId>com.bucket4j</groupId>
+            <artifactId>bucket4j_jdk17-core</artifactId>
+            <version>${bucket4j.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
+        </dependency>
+
         <!-- Observabilidad -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-configuration-processor</artifactId>
+            <optional>true</optional>
         </dependency>
 
         <!-- Tests -->

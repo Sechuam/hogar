@@ -31,8 +31,14 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     }
 
     @ExceptionHandler(DomainException.class)
-    ProblemDetail handleDomain(DomainException ex) {
-        return Problems.of(ex.getStatus(), ex.getCode(), ex.getStatus().getReasonPhrase(), ex.getMessage());
+    ResponseEntity<ProblemDetail> handleDomain(DomainException ex) {
+        ProblemDetail problem = Problems.of(
+                ex.getStatus(), ex.getCode(), ex.getStatus().getReasonPhrase(), ex.getMessage());
+        ResponseEntity.BodyBuilder response = ResponseEntity.status(ex.getStatus());
+        if (ex instanceof TooManyRequestsException tooMany) {
+            response.header(HttpHeaders.RETRY_AFTER, String.valueOf(tooMany.getRetryAfterSeconds()));
+        }
+        return response.body(problem);
     }
 
     @ExceptionHandler(OptimisticLockingFailureException.class)
