@@ -48,11 +48,11 @@ apuntaría a una BD muerta. Los IT se ejecutan con Failsafe (`*IT`) en `verify`.
 Un campo `currency` (ISO-4217) en el hogar; no se mezclan monedas dentro de un hogar.
 Multi-moneda queda fuera de alcance.
 
-## D-009 · PROPORTIONAL con ingreso 0 de un miembro — Provisional (Fase 0)
+## D-009 · PROPORTIONAL con ingreso 0 de un miembro — Aceptada (confirmada antes de la Fase 2)
 **Decisión:** el reparto es literal: quien tiene 0 € de ingresos en el mes paga 0 €. Solo se
 cae a EQUAL (con warning) cuando la **suma** de ingresos del hogar en ese mes es 0.
-**Alternativa:** caer a EQUAL si cualquier miembro tiene ingreso 0. Pendiente de validar con
-el product owner antes de la Fase 2.
+**Alternativa descartada:** caer a EQUAL si cualquier miembro tiene ingreso 0 (desvirtúa la
+política: quien elige PROPORTIONAL acepta que quien no ingresa no aporte ese mes).
 
 ## D-010 · Ingresos recurrentes = mensuales — Provisional (Fase 0)
 Un ingreso recurrente cuenta en cada mes natural entre `startDate` y `endDate` (opcional).
@@ -198,3 +198,26 @@ cubren con IT pero no cuentan para el umbral: el número que importa es el de la
 
 **Deuda conocida:** `GET /api/households` hace N+1 (`countActive` por hogar); aceptable con los
 pocos hogares por usuario esperados, a resolver con una consulta agregada en la Fase 6.
+
+---
+
+## D-034 · Participan en un gasto los miembros activos al crearlo o recalcularlo — Aceptada (Fase 2)
+Un gasto se reparte entre los miembros activos en el momento de registrarlo, aunque su fecha sea
+anterior. Reconstruir quién era miembro en una fecha pasada complica el modelo y sorprende al
+usuario ("lo apunto hoy y lo pago con quien vive hoy"). Elegir participantes concretos por gasto
+queda como mejora futura.
+
+## D-035 · Los enums de dominio son lenguaje publicado entre features — Aceptada (Fase 2)
+`SplitPolicy` es el mismo concepto en `household` y en `expense`. Duplicarlo obligaría a mapear
+por nombre sin aportar aislamiento real. ArchUnit permite depender de **enums** del `domain` de
+otra feature; entidades, repositorios y servicios internos siguen prohibidos.
+
+## D-036 · Paginación con `PageResponse` propio — Aceptada (Fase 2)
+`PageResponse(content, page, size, totalElements, totalPages)` en lugar de serializar `Page` de
+Spring Data, cuyo JSON no es un contrato estable. `size` máximo 100.
+
+## D-037 · El reparto se calcula en céntimos con aritmética exacta — Aceptada (Fase 2)
+`SplitCalculator` trabaja en céntimos (`BigInteger`/`BigDecimal` sin divisiones inexactas) y
+asigna el sobrante por mayor resto con desempate por antigüedad en el hogar y `userId`. La suma
+de las partes es el total por construcción, y además se comprueba en código. Se guarda el `weight`
+de cada parte (ingreso usado o 1) para poder explicar el reparto después.

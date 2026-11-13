@@ -61,11 +61,11 @@ decisiones D-013 a D-033.
 
 ---
 
-## Fase 2 — Finanzas: ingresos y gastos ⬜
+## Fase 2 — Finanzas: ingresos y gastos 🟡
 **Rama:** `fase-2-finanzas`
 
-**Contratos:** `IncomeQueryService.monthlyIncomeByMember(householdId, YearMonth)`,
-`SplitCalculator` (puro, sin Spring) con `SplitResult(shares, appliedPolicy, warnings)`.
+**Contratos:** ver `docs/api/fase-2-contratos.md` (`IncomeQueries`, `HouseholdQueries`,
+`SplitCalculator` puro con `SplitResult`, DTOs y endpoints).
 
 - `arquitecto-datos`: `incomes`, `shared_expenses` (con `split_policy_applied`), `expense_shares`
   (`CHECK amount >= 0`), índices por `(household_id, date)`.
