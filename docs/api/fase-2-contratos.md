@@ -12,8 +12,14 @@ código; aquí se fija el comportamiento. Cambiar un contrato → avisar al coor
 | `expense_shares` | `id`, `expense_id → shared_expenses ON DELETE CASCADE`, `user_id → users`, `amount numeric(19,2)`, `weight numeric(19,2)` | `CHECK amount >= 0`, `CHECK weight >= 0`, `UNIQUE(expense_id, user_id)`, índice `user_id` |
 
 - `SharedExpense` es raíz de agregado con sus `ExpenseShare` (`@OneToMany` cascade ALL +
-  orphanRemoval, LAZY). Reemplazar el reparto = sustituir la colección completa (método de dominio
-  `replaceShares(List<ShareAllocation>, SplitPolicy applied, boolean fallback, Instant now)`).
+  orphanRemoval, LAZY, `@BatchSize(100)`). Reemplazar el reparto = sustituir la colección completa
+  con `replaceShares(SplitResult, Instant now)`. `UNIQUE(expense_id, user_id)` es
+  `DEFERRABLE INITIALLY DEFERRED` (D-038).
+- En las entidades la fecha se llama `startDate` (ingreso) y `expenseDate` (gasto); en la API, `date`.
+- Repositorios: `IncomeRepository.search(householdId, userId?, month?, pageable)`,
+  `sumByUserForMonth(householdId, month)`; `SharedExpenseRepository.search(householdId, from?, to?,
+  category?, paidBy?, pageable)` y `findByIdAndHouseholdId` (con shares). Orden fijo; el `Sort` del
+  `Pageable` se ignora.
 - `Income`: `household_id`/`user_id` como UUID (D-017). `appliesTo(YearMonth)`: puntual → mes de
   `start_date`; recurrente → `YearMonth(start) <= m <= YearMonth(end)` (sin fin = indefinido).
 - La moneda del gasto se **copia** del hogar al crearlo (el hogar no permite cambiarla, pero el

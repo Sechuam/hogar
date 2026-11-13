@@ -221,3 +221,24 @@ Spring Data, cuyo JSON no es un contrato estable. `size` máximo 100.
 asigna el sobrante por mayor resto con desempate por antigüedad en el hogar y `userId`. La suma
 de las partes es el total por construcción, y además se comprueba en código. Se guarda el `weight`
 de cada parte (ingreso usado o 1) para poder explicar el reparto después.
+
+## D-038 · Unicidad de shares diferida al commit — Aceptada (Fase 2)
+Hibernate inserta los hijos nuevos antes de borrar los huérfanos (HHH-2801): recalcular un reparto
+con los mismos miembros violaba `UNIQUE(expense_id, user_id)` a mitad de flush. La restricción es
+`DEFERRABLE INITIALLY DEFERRED`: se comprueba sobre el estado final de la transacción.
+
+## D-039 · Filtros opcionales con `Specification` — Aceptada (Fase 2)
+`(:p is null or …)` en JPQL con UUID/fechas nulas provoca errores de tipo en PostgreSQL. Los
+listados filtrables usan `Specification` encapsuladas en métodos `default` del repositorio
+(`search(...)`), con orden total fijo (fecha, `createdAt`, `id`) para que la paginación no
+duplique ni pierda filas.
+
+## D-040 · Listados de gastos sin fetch join + `@BatchSize` — Aceptada (Fase 2)
+Paginar con fetch de colección obliga a Hibernate a paginar en memoria (HHH90003004). Se pagina en
+SQL y las shares de toda la página llegan en una sola consulta `IN` (`@BatchSize(100)`, igual al
+tamaño máximo de página). El detalle usa `@EntityGraph`.
+
+## D-041 · `LargestRemainder` compartido en `shared.money` — Aceptada (Fase 2)
+Mismo algoritmo (mayor resto exacto en enteros) para repartir gastos y para los porcentajes del
+resumen de ingresos; vive en `shared` porque lo usan dos features. El desempate por `userId`
+compara el UUID como texto (mismo orden que `uuid` en PostgreSQL; `UUID.compareTo` compara con signo).
