@@ -18,8 +18,11 @@ import com.hogar.shared.error.NotFoundException;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Stream;
+import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,6 +37,12 @@ public class InvitationService {
     static final String INVITATION_EXHAUSTED = "invitation-exhausted";
     /** Intentos de generar un código libre antes de rendirse (con 2^50 códigos, colisionar dos veces es irreal). */
     static final int MAX_CODE_ATTEMPTS = 5;
+    /** Tope defensivo de vigentes listadas; con el TTL máximo acotado no se alcanza en uso normal. */
+    static final int MAX_PENDING_LISTED = 100;
+    /** Revocadas o caducadas que se listan (las más recientes). */
+    static final int MAX_INACTIVE_LISTED = 20;
+    private static final Comparator<Invitation> NEWEST_FIRST = Comparator
+            .comparing(Invitation::getCreatedAt).thenComparing(Invitation::getId).reversed();
 
     private final InvitationRepository invitations;
     private final HouseholdRepository households;
@@ -64,11 +73,20 @@ public class InvitationService {
         return HouseholdMapper.toResponse(invitations.save(invitation));
     }
 
-    /** Todas las invitaciones del hogar (también caducadas y revocadas), las más recientes primero. */
+    /**
+     * Invitaciones del hogar, las más recientes primero: todas las vigentes (hasta
+     * {@value #MAX_PENDING_LISTED}) y las {@value #MAX_INACTIVE_LISTED} revocadas o caducadas más
+     * recientes. El historial crece sin límite y no aporta nada al OWNER más allá de lo reciente;
+     * las vigentes se listan siempre para que se puedan revocar.
+     */
     @Transactional(readOnly = true)
     public List<InvitationResponse> list(UUID householdId, UUID userId) {
         guard.requireOwner(householdId, userId);
-        return invitations.findByHouseholdIdOrderByCreatedAtDesc(householdId).stream()
+        Instant now = Instant.now(clock);
+        return Stream.concat(
+                        invitations.findPending(householdId, now, Limit.of(MAX_PENDING_LISTED)).stream(),
+                        invitations.findInactive(householdId, now, Limit.of(MAX_INACTIVE_LISTED)).stream())
+                .sorted(NEWEST_FIRST)
                 .map(HouseholdMapper::toResponse)
                 .toList();
     }
