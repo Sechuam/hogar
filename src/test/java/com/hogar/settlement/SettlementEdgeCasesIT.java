@@ -25,7 +25,6 @@ import java.util.Set;
 import java.util.UUID;
 import org.hibernate.SessionFactory;
 import org.hibernate.stat.Statistics;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -80,9 +79,6 @@ class SettlementEdgeCasesIT extends SettlementApiSupport {
      * sugerido no se puede registrar tal cual: 400 en {@code amount}. Hay que trocearlo a mano.
      */
     @Test
-    @Disabled("BUG (baja): un pago sugerido > 999 999 999,99 no se puede registrar como liquidación; "
-            + "propuesta: subir @DecimalMax/@Digits de SettlementRequest al límite de numeric(19,2) "
-            + "(17 enteros) o trocear la sugerencia en DebtSimplifier")
     void suggestedTransferAboveTheMaximumSettlementCanBeRegistered() {
         TestUser ana = users().create("Ana");
         TestUser bob = users().create("Bob");
@@ -367,7 +363,7 @@ class SettlementEdgeCasesIT extends SettlementApiSupport {
 
     @ParameterizedTest
     // "0.010": @Digits cuenta la escala tal cual (más de 2 decimales aunque sean ceros), como en gastos.
-    @ValueSource(strings = {"0.010", "12.500000", "1e10", "1E+9", "1e-3", "-0.01", "1e400", "\"doce\"", "true", "{}", "[1]", "null"})
+    @ValueSource(strings = {"0.010", "12.500000", "1e18", "1E+17", "1e-3", "-0.01", "1e400", "\"doce\"", "true", "{}", "[1]", "null"})
     void hostileAmountsAreValidationErrorsOfTheAmountField(String amountJson) {
         TestUser ana = users().create("Ana");
         TestUser bob = users().create("Bob");

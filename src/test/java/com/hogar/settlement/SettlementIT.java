@@ -157,7 +157,7 @@ class SettlementIT extends SettlementApiSupport {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"0", "0.00", "-1.00", "1.005", "1000000000.00"})
+    @ValueSource(strings = {"0", "0.00", "-1.00", "1.005", "100000000000000000.00"})
     void invalidAmountIsBadRequest(String amount) {
         Home s = home();
         ResponseEntity<String> response = call(HttpMethod.POST, settlementsPath(s.id()), s.bob(),
