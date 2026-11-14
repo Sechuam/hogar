@@ -102,7 +102,9 @@ public class SettlementService {
     @Transactional
     public void delete(UUID householdId, UUID userId, UUID settlementId) {
         guard.requireMember(householdId, userId);
-        Settlement settlement = load(householdId, settlementId);
+        // Bloqueo de fila: con un borrado simultáneo, el segundo espera y después recibe 404.
+        Settlement settlement = settlements.findForUpdate(settlementId, householdId)
+                .orElseThrow(SettlementService::notFound);
         if (!userId.equals(settlement.getCreatedBy()) && !settlement.involves(userId)
                 && !isOwner(households.getSplitInfo(householdId), userId)) {
             throw new ForbiddenException(SETTLEMENT_DELETE_FORBIDDEN,
@@ -124,7 +126,10 @@ public class SettlementService {
     }
 
     private Settlement load(UUID householdId, UUID settlementId) {
-        return settlements.findByIdAndHouseholdId(settlementId, householdId)
-                .orElseThrow(() -> new NotFoundException(SETTLEMENT_NOT_FOUND, "La liquidación no existe."));
+        return settlements.findByIdAndHouseholdId(settlementId, householdId).orElseThrow(SettlementService::notFound);
+    }
+
+    private static NotFoundException notFound() {
+        return new NotFoundException(SETTLEMENT_NOT_FOUND, "La liquidación no existe.");
     }
 }

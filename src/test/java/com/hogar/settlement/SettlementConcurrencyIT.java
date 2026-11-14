@@ -32,7 +32,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
 /**
- * QA Fase 5: balances y liquidaciones con peticiones simultáneas.  Nunca 500 ni Σ ≠ 0 visible.
+ * QA Fase 5: balances y liquidaciones con peticiones simultáneas. Nunca 500, nunca Σ ≠ 0 visible y
+ * un borrado doble da 204 + 404.
  */
 class SettlementConcurrencyIT extends SettlementApiSupport {
 
@@ -176,6 +177,27 @@ class SettlementConcurrencyIT extends SettlementApiSupport {
         assertThat(failures).isEmpty();
         BalanceResponse after = balances(t.ana(), t.id());
         assertMatchesDb(t.id(), after);
+    }
+
+    /** Dos borrados simultáneos de la misma liquidación: uno 204 y el otro 404, nunca 409 ni 500. */
+    @Test
+    void doubleDeleteOfTheSameSettlementGivesNoContentAndNotFound() throws Exception {
+        Trio t = trio();
+        for (int round = 0; round < ROUNDS; round++) {
+            SettlementResponse s = settle(t.bob(), t.id(), t.bob().id(), t.ana().id(), "5.00");
+
+            List<ResponseEntity<String>> responses = race(
+                    () -> deleteSettlement(t.bob(), t.id(), s.id()),
+                    () -> deleteSettlement(t.ana(), t.id(), s.id()));
+
+            List<HttpStatus> statuses = responses.stream().map(r -> HttpStatus.valueOf(r.getStatusCode().value()))
+                    .toList();
+            assertThat(statuses).as("ronda %d: %s", round, responses)
+                    .containsExactlyInAnyOrder(HttpStatus.NO_CONTENT, HttpStatus.NOT_FOUND);
+            responses.stream().filter(r -> r.getStatusCode() == HttpStatus.NOT_FOUND)
+                    .forEach(r -> assertProblem(r, HttpStatus.NOT_FOUND, "settlement-not-found"));
+        }
+        assertThat(listSettlements(t.ana(), t.id(), "").totalElements()).isZero();
     }
 
     /** Liquidación y gasto creados a la vez: ambos 201 y los balances cuadran con la BD. */

@@ -1,6 +1,7 @@
 package com.hogar.settlement.repository;
 
 import com.hogar.settlement.domain.Settlement;
+import jakarta.persistence.LockModeType;
 import jakarta.persistence.criteria.Predicate;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -15,6 +16,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 
 /** Liquidaciones (inmutables: se crean y se borran, nunca se editan). */
@@ -30,6 +32,15 @@ public interface SettlementRepository
 
     /** Liquidación solo si pertenece al hogar (si no, 404 sin filtrar existencia). */
     Optional<Settlement> findByIdAndHouseholdId(UUID id, UUID householdId);
+
+    /**
+     * Como {@link #findByIdAndHouseholdId} pero bloqueando la fila ({@code SELECT … FOR UPDATE}) hasta
+     * el fin de la transacción: dos borrados simultáneos se serializan y el segundo ya no la encuentra
+     * (404) en vez de fallar al borrar una fila que ya no existe (409).
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select s from Settlement s where s.id = :id and s.householdId = :householdId")
+    Optional<Settlement> findForUpdate(UUID id, UUID householdId);
 
     /** Σ importe por pagador ({@code fromUserId}) en el hogar. Usuarios sin liquidaciones no aparecen. */
     @Query("select s.fromUserId as userId, sum(s.amount) as total from Settlement s"

@@ -88,7 +88,8 @@ class SettlementServiceTest {
     private Settlement stored(UUID from, UUID to, UUID createdBy) {
         Settlement s = Settlement.create(householdId, from, to, new BigDecimal("12.50"), "EUR", DATE, null,
                 createdBy, NOW);
-        when(settlements.findByIdAndHouseholdId(s.getId(), householdId)).thenReturn(Optional.of(s));
+        lenient().when(settlements.findByIdAndHouseholdId(s.getId(), householdId)).thenReturn(Optional.of(s));
+        lenient().when(settlements.findForUpdate(s.getId(), householdId)).thenReturn(Optional.of(s));
         return s;
     }
 
@@ -254,7 +255,7 @@ class SettlementServiceTest {
     @Test
     void deleteOfUnknownSettlementIsNotFound() {
         UUID id = UUID.randomUUID();
-        when(settlements.findByIdAndHouseholdId(id, householdId)).thenReturn(Optional.empty());
+        when(settlements.findForUpdate(id, householdId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.delete(householdId, ana, id))
                 .isInstanceOf(NotFoundException.class)
