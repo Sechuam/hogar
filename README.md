@@ -380,7 +380,7 @@ Las 61 decisiones (contexto, decisión, alternativas, consecuencias) están en
 11. **Invariantes duplicadas en la BD** ([D-018](docs/DECISIONS.md#d-018--invariantes-críticas-duplicadas-en-bd--aceptada-fase-1)).
     La aplicación valida primero; `CHECK`, `UNIQUE` parciales y FKs compuestas son la red ante bugs y
     carreras. Una violación no prevista sale como 409 `data-conflict` y se registra sin datos personales.
-12. **Observabilidad desde el primer request** ([alcance de la Fase 6](docs/api/fase-6-alcance.md)).
+12. **Observabilidad desde el primer request** ([D-062](docs/DECISIONS.md#d-062--observabilidad-con-request-id-logs-ecs-y-métricas-aparte--aceptada-fase-6)).
     `X-Request-Id` (se reutiliza el del cliente si es válido) en la respuesta, en el MDC y en cada
     `ProblemDetail`; logs JSON ECS fuera de `dev`; métricas Prometheus solo en el puerto de gestión.
 

@@ -9,7 +9,8 @@ services:
       POSTGRES_USER: ${DB_USERNAME:-hogar}
       POSTGRES_PASSWORD: ${DB_PASSWORD:?Define DB_PASSWORD en .env}
     ports:
-      - "${DB_PORT:-5432}:5432"
+      # Solo en local: la BD no queda expuesta al resto de la red.
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
     volumes:
       - db-data:/var/lib/postgresql/data
     healthcheck:
