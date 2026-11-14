@@ -30,6 +30,7 @@ services:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev}
       JWT_SECRET: ${JWT_SECRET:-}
       GOOGLE_CLIENT_IDS: ${GOOGLE_CLIENT_IDS:-}
+      STORAGE_DIR: /app/storage
     ports:
       - "${SERVER_PORT:-8080}:8080"
     volumes:

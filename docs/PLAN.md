@@ -112,7 +112,7 @@ enormes → 500, también en gastos e ingresos. Decisiones D-047 a D-052; contra
 
 ---
 
-## Fase 4 — Facturas (adjuntos) ⬜
+## Fase 4 — Facturas (adjuntos) ✅
 **Rama:** `fase-4-facturas` · paralelo con Fase 3.
 
 - `StorageService` (interfaz: `store`, `load`, `delete`) con `LocalFileSystemStorage` ahora;
@@ -121,6 +121,11 @@ enormes → 500, también en gastos e ingresos. Decisiones D-047 a D-052; contra
 - Validación: tamaño máx. configurable (10 MB), tipo por **magic bytes** (PDF, JPEG, PNG, WebP),
   no fiarse de la extensión ni del `Content-Type`. Nombre en disco = UUID (no el original).
 - Descarga solo para miembros; `Content-Disposition` seguro. Tests con ficheros falsos (exe renombrado a .pdf).
+
+**Resultado:** 540 tests unitarios + 549 IT en verde (con la Fase 3). Ficheros falsos y polyglots,
+nombres hostiles, límites reales de 10 MB, carreras deterministas subida/borrado, fallo real de BD sin
+huérfanos. QA corrigió un 500 por nombres largos con emojis, multipart roto → 500 y un falso 413.
+Decisiones D-053 a D-057; contrato en `docs/api/fase-4-contratos.md`.
 
 ---
 
