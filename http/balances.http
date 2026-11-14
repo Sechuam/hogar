@@ -1,0 +1,130 @@
+### Hogar API - 6/6 Balances y liquidaciones
+# Requiere finances.http. La app no mueve dinero: una liquidación anota un pago hecho fuera
+# (Bizum, transferencia, efectivo). Positivo = le deben; negativo = debe.
+# Con los datos de finances.http: Ana +329,38, Luis -334,38, Marta +5,00.
+
+### Balances calculados (Σ = 0) -> 200
+GET {{baseUrl}}/api/households/{{householdId}}/balances
+Authorization: Bearer {{luisToken}}
+
+> {%
+    client.test("balances 200", () => {
+        client.assert(response.status === 200, "status " + response.status);
+        client.assert(response.body.settled === false, "aún hay deudas");
+    });
+%}
+
+### Pagos sugeridos: como mucho n-1 (mayor deudor -> mayor acreedor) -> 200
+GET {{baseUrl}}/api/households/{{householdId}}/settlements/suggested
+Authorization: Bearer {{luisToken}}
+
+> {%
+    client.test("sugerencias 200", () => {
+        client.assert(response.status === 200, "status " + response.status);
+        client.assert(response.body.transfers.length === 2, "pagos " + response.body.transfers.length);
+    });
+    const [t1, t2] = response.body.transfers;
+    client.global.set("t1From", t1.fromUserId);
+    client.global.set("t1To", t1.toUserId);
+    client.global.set("t1Amount", t1.amount.toFixed(2));
+    client.global.set("t2From", t2.fromUserId);
+    client.global.set("t2To", t2.toUserId);
+    client.global.set("t2Amount", t2.amount.toFixed(2));
+%}
+
+### Marta no es parte de la primera sugerencia ni OWNER -> 403 settlement-forbidden
+POST {{baseUrl}}/api/households/{{householdId}}/settlements
+Authorization: Bearer {{martaToken}}
+Content-Type: application/json
+
+{
+  "fromUserId": "{{t1From}}",
+  "toUserId": "{{t1To}}",
+  "amount": {{t1Amount}},
+  "date": "2026-03-31"
+}
+
+> {%
+    client.test("403", () => client.assert(response.status === 403, "status " + response.status));
+%}
+
+### Luis (deudor) registra el primer pago sugerido -> 201
+POST {{baseUrl}}/api/households/{{householdId}}/settlements
+Authorization: Bearer {{luisToken}}
+Content-Type: application/json
+
+{
+  "fromUserId": "{{t1From}}",
+  "toUserId": "{{t1To}}",
+  "amount": {{t1Amount}},
+  "date": "2026-03-31",
+  "note": "Bizum marzo"
+}
+
+> {%
+    client.test("liquidación 201", () => client.assert(response.status === 201, "status " + response.status));
+    client.global.set("settlementId", response.body.id);
+%}
+
+### Ana (OWNER) registra el segundo -> 201
+POST {{baseUrl}}/api/households/{{householdId}}/settlements
+Authorization: Bearer {{anaToken}}
+Content-Type: application/json
+
+{
+  "fromUserId": "{{t2From}}",
+  "toUserId": "{{t2To}}",
+  "amount": {{t2Amount}},
+  "date": "2026-03-31",
+  "note": "Efectivo"
+}
+
+> {%
+    client.test("liquidación 201", () => client.assert(response.status === 201, "status " + response.status));
+%}
+
+### Aplicar las sugerencias salda el hogar -> 200 settled = true
+GET {{baseUrl}}/api/households/{{householdId}}/balances
+Authorization: Bearer {{martaToken}}
+
+> {%
+    client.test("saldado", () => {
+        client.assert(response.status === 200, "status " + response.status);
+        client.assert(response.body.settled === true, "settled " + response.body.settled);
+    });
+%}
+
+### Liquidaciones de marzo en las que participa Luis -> 200
+GET {{baseUrl}}/api/households/{{householdId}}/settlements?from=2026-03-01&to=2026-03-31&userId={{luisId}}
+Authorization: Bearer {{anaToken}}
+
+> {%
+    client.test("listado 200", () => {
+        client.assert(response.status === 200, "status " + response.status);
+        client.assert(response.body.totalElements === 2, "liquidaciones " + response.body.totalElements);
+    });
+%}
+
+### Rango de fechas invertido -> 400 invalid-date-range
+GET {{baseUrl}}/api/households/{{householdId}}/settlements?from=2026-04-01&to=2026-03-01
+Authorization: Bearer {{anaToken}}
+
+> {%
+    client.test("400", () => client.assert(response.status === 400, "status " + response.status));
+%}
+
+### Ana (receptora) anula el primer pago: no lo recibió -> 204
+DELETE {{baseUrl}}/api/households/{{householdId}}/settlements/{{settlementId}}
+Authorization: Bearer {{anaToken}}
+
+> {%
+    client.test("borrado 204", () => client.assert(response.status === 204, "status " + response.status));
+%}
+
+### Ya no existe -> 404 settlement-not-found
+GET {{baseUrl}}/api/households/{{householdId}}/settlements/{{settlementId}}
+Authorization: Bearer {{anaToken}}
+
+> {%
+    client.test("404", () => client.assert(response.status === 404, "status " + response.status));
+%}
