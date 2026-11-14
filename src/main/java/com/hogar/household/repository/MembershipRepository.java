@@ -18,6 +18,9 @@ public interface MembershipRepository extends JpaRepository<Membership, UUID> {
             + " where m.householdId = :householdId and m.userId = :userId and m.leftAt is null")
     boolean existsActive(UUID householdId, UUID userId);
 
+    /** Alguna membresía, activa o pasada. */
+    boolean existsByHouseholdIdAndUserId(UUID householdId, UUID userId);
+
     /** Si el usuario fue expulsado del hogar en algún momento posterior a {@code since}. */
     @Query("select count(m) > 0 from Membership m where m.householdId = :householdId and m.userId = :userId"
             + " and m.removedBy is not null and m.leftAt > :since")

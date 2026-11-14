@@ -367,3 +367,37 @@ comprobar al descargar; sin limpieza periódica de huérfanos; la subida retiene
 bloqueo del gasto mientras escribe (con S3 cruzaría la red: subir primero y enlazar después); un
 borrado de gastos que no pase por `ExpenseService` (cascada futura de hogar/usuario) no publicaría
 el evento.
+
+## D-058 · Balances calculados, nunca guardados — Aceptada (Fase 5)
+`balance = pagado − debido + liquidaciones enviadas − recibidas` (positivo = acreedor) se calcula en
+cada petición con cuatro sumas agrupadas en BD (gastos, partes congeladas, enviadas, recibidas): no hay
+saldo almacenado que pueda desincronizarse. `BalanceCalculator` comprueba Σ == 0 en código; si fallara
+sería un bug (500), nunca un error del cliente. Los ex-miembros con movimientos siguen apareciendo
+(`active = false`): sus deudas son del hogar.
+
+## D-059 · Una sola foto de la BD para calcular balances — Aceptada (Fase 5)
+**Contexto:** QA reprodujo 500 al leer balances mientras se creaban o editaban gastos: con READ
+COMMITTED cada suma ve un instante distinto y Σ pagado ≠ Σ debido.
+**Decisión:** `GET /balances` y `GET /settlements/suggested` usan
+`@Transactional(readOnly = true, isolation = REPEATABLE_READ)`: todas las sumas ven el mismo
+instante. En PostgreSQL una transacción de solo lectura en ese nivel nunca se aborta por
+serialización. **Alternativas:** una única consulta con `UNION` (más difícil de mantener).
+
+## D-060 · Sugerencias de pago voraces y deterministas — Aceptada (Fase 5)
+El mayor deudor paga al mayor acreedor `min(deuda, crédito)` hasta saldar, en céntimos y con empates
+por `userId` como texto (D-041). Da como mucho n−1 pagos (no siempre el mínimo absoluto, que es un
+problema NP-difícil), nunca pagos a uno mismo, y aplicarlos salda el hogar (probado con 10 000 casos
+y con escenarios aleatorios por API). El límite del importe de una liquidación es el de
+`numeric(19,2)`, no el de un gasto: una sugerencia puede sumar varios gastos máximos.
+
+## D-061 · Quién registra y borra liquidaciones — Aceptada (Fase 5)
+Registrar: una de las dos partes u OWNER (403 `settlement-forbidden`), y **después** se comprueba que
+las partes son o fueron miembros (422): una petición no autorizada no revela si un UUID estuvo en el
+hogar. Se admite pagar de más (anota la realidad; el balance cambia de signo). Borrar: creador,
+cualquiera de las partes u OWNER (el receptor puede anular un pago que no recibió); el borrado bloquea
+la fila, así dos borrados simultáneos dan 204 + 404 en vez de 409.
+
+**Deuda conocida (Fase 5):** liquidaciones inmutables (corregir = borrar y crear); un ex-miembro no
+puede consultar su saldo (ya no es miembro); clientes que lean importes como `double` perderían
+precisión por encima de ~9·10^13 €; los DTO con `@AssertTrue` (`distinctParties`, `endDateValid`…)
+aparecen como propiedad al serializarse (inocuo en la entrada; a revisar con OpenAPI en la Fase 6).

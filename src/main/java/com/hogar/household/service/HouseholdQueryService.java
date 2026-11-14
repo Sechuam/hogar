@@ -30,4 +30,10 @@ class HouseholdQueryService implements HouseholdQueries {
                 .toList();
         return new HouseholdSplitInfo(household.getId(), household.getSplitPolicy(), household.getCurrency(), members);
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean isCurrentOrFormerMember(UUID householdId, UUID userId) {
+        return memberships.existsByHouseholdIdAndUserId(householdId, userId);
+    }
 }

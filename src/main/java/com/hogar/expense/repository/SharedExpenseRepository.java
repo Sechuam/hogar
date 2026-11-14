@@ -41,6 +41,16 @@ public interface SharedExpenseRepository
      * partes: PostgreSQL no permite {@code FOR UPDATE} sobre el lado nullable de un outer join, y
      * bloquear la raíz del agregado basta para serializar las escrituras concurrentes (D-044).
      */
+    /** Σ importe por pagador en el hogar. */
+    @Query("select e.paidBy as userId, sum(e.amount) as total from SharedExpense e"
+            + " where e.householdId = :householdId group by e.paidBy")
+    List<UserAmount> sumPaidByUser(UUID householdId);
+
+    /** Σ partes del reparto por usuario en el hogar. */
+    @Query("select s.userId as userId, sum(s.amount) as total from ExpenseShare s"
+            + " where s.expense.householdId = :householdId group by s.userId")
+    List<UserAmount> sumOwedByUser(UUID householdId);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select e from SharedExpense e where e.id = :id and e.householdId = :householdId")
     Optional<SharedExpense> findForUpdate(UUID id, UUID householdId);

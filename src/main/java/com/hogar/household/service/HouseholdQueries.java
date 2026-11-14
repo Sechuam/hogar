@@ -11,4 +11,10 @@ public interface HouseholdQueries {
 
     /** @throws com.hogar.shared.error.NotFoundException {@code household-not-found} si no existe */
     HouseholdSplitInfo getSplitInfo(UUID householdId);
+
+    /**
+     * {@code true} si el usuario es o ha sido miembro del hogar (también si lo dejó o lo expulsaron):
+     * sus deudas siguen siendo del hogar.
+     */
+    boolean isCurrentOrFormerMember(UUID householdId, UUID userId);
 }

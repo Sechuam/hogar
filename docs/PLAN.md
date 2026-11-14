@@ -129,7 +129,7 @@ Decisiones D-053 a D-057; contrato en `docs/api/fase-4-contratos.md`.
 
 ---
 
-## Fase 5 — Balances y liquidaciones ⬜
+## Fase 5 — Balances y liquidaciones ✅
 **Rama:** `fase-5-balances`
 
 - `Balance` **calculado** (no almacenado): `pagado − debido + liquidaciones enviadas − recibidas`.
@@ -138,6 +138,12 @@ Decisiones D-053 a D-057; contrato en `docs/api/fase-4-contratos.md`.
 - `GET /balances` y `GET /settlements/suggested`: simplificación de deudas con algoritmo
   voraz (mayor deudor ↔ mayor acreedor) → ≤ n−1 transferencias. Deterministico.
 - Tests: hogar de 2 y 4 miembros, todo saldado, céntimos.
+
+**Resultado:** 637 tests unitarios + 668 IT en verde. Balances contrastados con SQL en cada escenario,
+simplificación con 10 000 casos aleatorios y escenarios aleatorios por API (aplicar las sugerencias
+salda siempre el hogar), ex-miembros con deuda, lecturas concurrentes con escrituras. QA corrigió un
+500 por lecturas inconsistentes (D-059), un 409 en borrados dobles y el límite de importe.
+Decisiones D-058 a D-061; contrato en `docs/api/fase-5-contratos.md`.
 
 ---
 

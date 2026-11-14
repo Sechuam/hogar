@@ -1,6 +1,8 @@
 package com.hogar.expense.service;
 
 import com.hogar.expense.dto.ExpenseRef;
+import com.hogar.expense.dto.ExpenseTotals;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -21,4 +23,10 @@ public interface ExpenseQueries {
      * @throws com.hogar.shared.error.ForbiddenException {@code expense-edit-forbidden}
      */
     ExpenseRef lockForModification(UUID householdId, UUID expenseId, UUID userId);
+
+    /**
+     * Pagado y debido por usuario sobre <b>todos</b> los gastos del hogar (shares congelados). Solo
+     * aparecen usuarios con algún importe; incluye ex-miembros. Σ paid == Σ owed por construcción.
+     */
+    Map<UUID, ExpenseTotals> totalsByUser(UUID householdId);
 }
