@@ -154,6 +154,34 @@ class AuthEdgeCasesIT extends AbstractIntegrationTest {
         assertThat(response.getBody().get("code").asText()).isEqualTo("validation-error");
     }
 
+    /**
+     * BCrypt limita a 72 <b>bytes</b> y Spring Security lanza {@code IllegalArgumentException} al
+     * codificar más: 72 caracteres no ASCII (144 bytes en UTF-8) pasaban {@code @Size(max = 72)} y
+     * acababan en 500.
+     */
+    @Test
+    void passwordOver72BytesInUtf8IsValidationErrorNotServerError() {
+        ResponseEntity<JsonNode> response = rest.postForEntity("/api/auth/register",
+                new RegisterRequest(uniqueEmail("utf8"), "ñ".repeat(37), "Ñandú"), JsonNode.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody().get("code").asText()).isEqualTo("validation-error");
+        assertThat(response.getBody().get("errors").get(0).get("field").asText()).isEqualTo("password");
+    }
+
+    @Test
+    void passwordOfExactly72BytesInUtf8IsAcceptedAndWorksForLogin() {
+        String password = "ñ".repeat(36);
+        String email = uniqueEmail("utf8-ok");
+        ResponseEntity<AuthResponse> registered = rest.postForEntity("/api/auth/register",
+                new RegisterRequest(email, password, "Ñandú"), AuthResponse.class);
+        assertThat(registered.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+
+        ResponseEntity<AuthResponse> login = rest.postForEntity("/api/auth/login",
+                new LoginRequest(email, password), AuthResponse.class);
+        assertThat(login.getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
     // ---------------------------------------------------------------- utilidades
 
     private AuthResponse register(String email) {

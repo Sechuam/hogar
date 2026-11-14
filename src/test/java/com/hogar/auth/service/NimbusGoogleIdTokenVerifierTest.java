@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.hogar.auth.service.GoogleIdTokenVerifier.GoogleIdentity;
+import com.hogar.shared.error.ServiceUnavailableException;
 import com.hogar.shared.error.UnauthorizedException;
 import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.RSAKey;
@@ -20,10 +21,13 @@ import java.util.List;
 import java.util.function.Consumer;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
 import org.springframework.security.oauth2.jwt.JwsHeader;
 import org.springframework.security.oauth2.jwt.JwtClaimsSet;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
+import org.springframework.security.oauth2.jwt.JwtException;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 
@@ -116,6 +120,35 @@ class NimbusGoogleIdTokenVerifierTest {
 
         assertThatThrownBy(() -> unconfigured.verify(token(googleKeys, c -> { })))
                 .isInstanceOf(UnauthorizedException.class);
+    }
+
+    @Test
+    void rejectsTokenWithoutAudience() {
+        assertInvalid(token(googleKeys, c -> c.claims(claims -> claims.remove("aud"))));
+    }
+
+    @Test
+    void rejectsTokenWithoutSubject() {
+        assertInvalid(token(googleKeys, c -> c.claims(claims -> claims.remove("sub"))));
+    }
+
+    @Test
+    void emailVerifiedMissingOrNotBooleanCountsAsNotVerified() {
+        assertThat(verifier.verify(token(googleKeys, c -> c.claims(claims -> claims.remove("email_verified"))))
+                .emailVerified()).isFalse();
+        assertThat(verifier.verify(token(googleKeys, c -> c.claim("email_verified", 1))).emailVerified()).isFalse();
+    }
+
+    /** JWKS de Google caído o inalcanzable: no es culpa del cliente → 503 reintentable, nunca 401 ni 500. */
+    @Test
+    void unreachableGoogleKeysAreServiceUnavailable() {
+        JwtDecoder down = token -> {
+            throw new JwtException("Couldn't retrieve remote JWK set: connect timed out");
+        };
+
+        assertThatThrownBy(() -> new NimbusGoogleIdTokenVerifier(down).verify("cualquier-token"))
+                .isInstanceOf(ServiceUnavailableException.class)
+                .extracting("code", "status").containsExactly("google-unavailable", HttpStatus.SERVICE_UNAVAILABLE);
     }
 
     private void assertInvalid(String idToken) {
