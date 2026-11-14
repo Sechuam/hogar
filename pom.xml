@@ -196,7 +196,9 @@
                                     <element>PACKAGE</element>
                                     <includes>
                                         <include>com.hogar.*.service</include>
+                                        <include>com.hogar.*.service.*</include>
                                         <include>com.hogar.*.domain</include>
+                                        <include>com.hogar.*.domain.*</include>
                                     </includes>
                                     <limits>
                                         <limit>
