@@ -90,7 +90,7 @@ class TaskController {
                                     @Parameter(description = "Solo las de este estado") @RequestParam(required = false) TaskStatus status,
                                     @Parameter(description = "`true` = PENDING con `dueDate` anterior a hoy; `false` = el resto") @RequestParam(required = false) Boolean overdue,
                                     @Parameter(description = ApiDoc.PAGE) @RequestParam(defaultValue = "0") @Min(0) @Max(MAX_PAGE) int page,
-                                    @Parameter(description = ApiDoc.SIZE) @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
+                                    @Parameter(description = ApiDoc.SIZE) @RequestParam(defaultValue = "20") @Min(1) @Max(PageResponse.MAX_SIZE) int size) {
         return tasks.list(householdId, currentUser.id(), mine, assigneeId, status, overdue, page, size);
     }
 
@@ -171,7 +171,7 @@ class TaskController {
     @GetMapping("/{taskId}/completions")
     PageResponse<TaskCompletionResponse> completions(@Parameter(description = "ID del hogar") @PathVariable UUID householdId, @Parameter(description = "ID de la tarea") @PathVariable UUID taskId,
                                                      @Parameter(description = ApiDoc.PAGE) @RequestParam(defaultValue = "0") @Min(0) @Max(MAX_PAGE) int page,
-                                                     @Parameter(description = ApiDoc.SIZE) @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
+                                                     @Parameter(description = ApiDoc.SIZE) @RequestParam(defaultValue = "20") @Min(1) @Max(PageResponse.MAX_SIZE) int size) {
         return tasks.completions(householdId, currentUser.id(), taskId, page, size);
     }
 }

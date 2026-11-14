@@ -79,7 +79,7 @@ class ExpenseController {
                                        @Parameter(description = "Solo esta categoría") @RequestParam(required = false) ExpenseCategory category,
                                        @Parameter(description = "Solo los pagados por este usuario") @RequestParam(required = false) UUID paidBy,
                                        @Parameter(description = ApiDoc.PAGE) @RequestParam(defaultValue = "0") @Min(0) @Max(PageResponse.MAX_PAGE) int page,
-                                       @Parameter(description = ApiDoc.SIZE) @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
+                                       @Parameter(description = ApiDoc.SIZE) @RequestParam(defaultValue = "20") @Min(1) @Max(PageResponse.MAX_SIZE) int size) {
         return expenses.list(householdId, currentUser.id(), from, to, category, paidBy, page, size);
     }
 

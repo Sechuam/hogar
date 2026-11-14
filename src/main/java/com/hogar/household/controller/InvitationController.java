@@ -57,7 +57,8 @@ class InvitationController {
     }
 
     @Operation(summary = "Listar las invitaciones del hogar (OWNER)",
-            description = "Todas, incluidas las caducadas, agotadas o revocadas.")
+            description = "Las más recientes primero: todas las vigentes (hasta 100) y las 20 revocadas o caducadas "
+                    + "más recientes.")
     @ApiResponse(responseCode = "200", description = "Invitaciones del hogar.")
     @ApiResponse(responseCode = "400", description = ApiDoc.BAD_PATH)
     @ApiResponse(responseCode = "403", description = ApiDoc.OWNER_ROLE_REQUIRED)
@@ -65,6 +66,19 @@ class InvitationController {
     @GetMapping("/api/households/{householdId}/invitations")
     List<InvitationResponse> list(@Parameter(description = "ID del hogar") @PathVariable UUID householdId) {
         return invitations.list(householdId, currentUser.id());
+    }
+
+    @Operation(summary = "Ver una invitación (OWNER)",
+            description = "Incluye las revocadas, caducadas o agotadas. Es el destino del `Location` del alta.")
+    @ApiResponse(responseCode = "200", description = "Invitación.")
+    @ApiResponse(responseCode = "400", description = ApiDoc.BAD_PATH)
+    @ApiResponse(responseCode = "403", description = ApiDoc.OWNER_ROLE_REQUIRED)
+    @ApiResponse(responseCode = "404", description = ApiDoc.HOUSEHOLD_NOT_FOUND + ApiDoc.NL
+            + "`invitation-not-found`: la invitación no es de este hogar.")
+    @GetMapping("/api/households/{householdId}/invitations/{invitationId}")
+    InvitationResponse get(@Parameter(description = "ID del hogar") @PathVariable UUID householdId,
+                           @Parameter(description = "ID de la invitación") @PathVariable UUID invitationId) {
+        return invitations.get(householdId, currentUser.id(), invitationId);
     }
 
     @Operation(summary = "Revocar una invitación (OWNER)",

@@ -78,6 +78,7 @@ class HouseholdAccessControlIT extends HouseholdApiSupport {
             new Endpoint(HttpMethod.POST, "/api/households/{h}/leave", null, false),
             new Endpoint(HttpMethod.POST, "/api/households/{h}/invitations", Map.of("maxUses", 1), true),
             new Endpoint(HttpMethod.GET, "/api/households/{h}/invitations", null, true),
+            new Endpoint(HttpMethod.GET, "/api/households/{h}/invitations/{i}", null, true),
             new Endpoint(HttpMethod.DELETE, "/api/households/{h}/invitations/{i}", null, true),
             new Endpoint(HttpMethod.POST, "/api/households/{h}/incomes", INCOME_BODY, false),
             new Endpoint(HttpMethod.GET, "/api/households/{h}/incomes", null, false),

@@ -143,6 +143,27 @@ class InvitationIT extends HouseholdApiSupport {
     }
 
     @Test
+    void locationOfACreatedInvitationCanBeFetchedOnlyByItsHouseholdOwner() {
+        TestUser ana = users().create("Ana");
+        TestUser luis = users().create("Luis");
+        UUID id = createHousehold(ana, "Piso").id();
+        ResponseEntity<String> created = call(HttpMethod.POST, invitationsPath(id), ana, null);
+        assertThat(created.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        InvitationResponse invitation = read(created, InvitationResponse.class);
+        String location = created.getHeaders().getLocation().getPath();
+
+        assertThat(location).isEqualTo(invitationsPath(id) + "/" + invitation.id());
+        assertThat(read(get(location, ana), InvitationResponse.class)).isEqualTo(invitation);
+        assertThat(accept(luis, invitation.code()).getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertProblem(get(location, luis), HttpStatus.FORBIDDEN, "owner-role-required");
+
+        TestUser eva = users().create("Eva");
+        UUID evas = createHousehold(eva, "De Eva").id();
+        assertProblem(get(invitationsPath(evas) + "/" + invitation.id(), eva), HttpStatus.NOT_FOUND,
+                "invitation-not-found");
+    }
+
+    @Test
     void unknownCodeIs404() {
         TestUser luis = users().create("Luis");
 

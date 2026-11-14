@@ -72,7 +72,7 @@ class IncomeController {
                                       @Parameter(description = "Solo los ingresos que cuentan en ese mes (`YYYY-MM`)", schema = @Schema(type = "string", example = "2026-03")) @RequestParam(required = false) YearMonth month,
                                       @Parameter(description = "Solo los ingresos de este usuario") @RequestParam(required = false) UUID userId,
                                       @Parameter(description = ApiDoc.PAGE) @RequestParam(defaultValue = "0") @Min(0) @Max(PageResponse.MAX_PAGE) int page,
-                                      @Parameter(description = ApiDoc.SIZE) @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
+                                      @Parameter(description = ApiDoc.SIZE) @RequestParam(defaultValue = "20") @Min(1) @Max(PageResponse.MAX_SIZE) int size) {
         return incomes.list(householdId, currentUser.id(), userId, month, page, size);
     }
 

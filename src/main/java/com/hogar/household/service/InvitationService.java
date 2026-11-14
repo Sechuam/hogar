@@ -91,6 +91,16 @@ public class InvitationService {
                 .toList();
     }
 
+    /** Una invitación del hogar (también revocada o caducada): destino del {@code Location} del alta. */
+    @Transactional(readOnly = true)
+    public InvitationResponse get(UUID householdId, UUID userId, UUID invitationId) {
+        guard.requireOwner(householdId, userId);
+        return invitations.findById(invitationId)
+                .filter(i -> i.getHouseholdId().equals(householdId))
+                .map(HouseholdMapper::toResponse)
+                .orElseThrow(InvitationService::invitationNotFound);
+    }
+
     /** Revoca la invitación. Idempotente. */
     @Transactional
     public void revoke(UUID householdId, UUID userId, UUID invitationId) {
