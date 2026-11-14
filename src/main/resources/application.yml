@@ -44,14 +44,27 @@ server:
     include-message: never
 
 management:
+  # Actuator en un puerto aparte, no publicado fuera de la red interna (ver docker-compose.yml y
+  # ManagementSecurityConfig). En el puerto de la aplicación solo quedan las probes /livez y /readyz.
+  server:
+    port: ${MANAGEMENT_PORT:8081}
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,metrics,prometheus
   endpoint:
     health:
       probes:
         enabled: true
+        add-additional-paths: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+logging:
+  # Se añade al patrón de consola por defecto (perfiles con logs legibles: dev, test).
+  pattern:
+    correlation: "[%X{requestId:-}] "
 
 hogar:
   security:
@@ -86,3 +99,15 @@ springdoc:
     path: /swagger-ui.html
   api-docs:
     path: /v3/api-docs
+
+---
+# Fuera de dev y test (Docker, producción): logs JSON estructurados en formato ECS
+# (Elastic Common Schema), con service.name y las claves del MDC (requestId) como campos.
+spring:
+  config:
+    activate:
+      on-profile: "!dev & !test"
+logging:
+  structured:
+    format:
+      console: ecs

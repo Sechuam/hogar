@@ -14,3 +14,14 @@ hogar:
   storage:
     local:
       base-dir: target/test-storage
+
+# Puerto de gestión aleatorio (como server.port en los IT): se lee con @LocalManagementPort.
+# Spring Boot desactiva la exportación de métricas en tests (salvo @AutoConfigureObservability, que
+# crearía otro contexto): se reactiva solo Prometheus para probar /actuator/prometheus.
+management:
+  server:
+    port: 0
+  prometheus:
+    metrics:
+      export:
+        enabled: true

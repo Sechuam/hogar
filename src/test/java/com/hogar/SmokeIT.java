@@ -21,11 +21,13 @@ class SmokeIT extends AbstractIntegrationTest {
     private JdbcTemplate jdbc;
 
     @Test
-    void healthIsUp() {
-        ResponseEntity<String> response = rest.getForEntity("/actuator/health", String.class);
+    void healthProbesAreUpOnPublicPort() {
+        for (String probe : new String[] {"/livez", "/readyz"}) {
+            ResponseEntity<String> response = rest.getForEntity(probe, String.class);
 
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(response.getBody()).contains("\"status\":\"UP\"");
+            assertThat(response.getStatusCode()).as(probe).isEqualTo(HttpStatus.OK);
+            assertThat(response.getBody()).as(probe).contains("\"status\":\"UP\"");
+        }
     }
 
     @Test
