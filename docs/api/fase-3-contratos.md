@@ -73,7 +73,19 @@ Miembros activos y roles: `HouseholdQueries.getSplitInfo(householdId).activeMemb
 
 `reopen` de una tarea `NONE` → PENDING (el histórico no se borra).
 
-## 4. Fuera de alcance / notas
+## 4. Aclaraciones tras QA
+
+- `RecurrenceSchedule` usa `k ≥ 0`: si el ancla es posterior a `max(currentDue, today)`, devuelve el ancla.
+- `dueDate` (y toda fecha de la API) entre `0001-01-01` y `9999-12-31` → si no, `validation-error` del
+  campo (D-047). Completar cuando la siguiente ocurrencia pasaría de 9999 → 422 `task-schedule-exhausted`.
+- `title` con solo espacios (también Unicode) → 400 (D-048). `page` > `Integer.MAX_VALUE / 100` → 400.
+- `mine=false` equivale a no filtrar: solo `mine=true` + `assigneeId` → 400 `conflicting-filters`.
+- Un asignado que está en la rotación pero ya no es miembro activo → 422 `assignee-not-member`.
+- PUT de recurrente con rotación a `NONE` sin quitar la rotación → 400; a `NONE` sin rotación → ancla a null.
+- Cuerpo de `complete`: ausente, vacío, `{}` o `{"dueDate": null}` = sin comprobación de ocurrencia.
+- Descripción en blanco se guarda como `null`.
+
+## 5. Fuera de alcance / notas
 - Al abandonar el hogar un miembro, sus tareas siguen asignadas a él (se ve en la respuesta) hasta que
   alguien las edite o la rotación pase de largo. Sin dependencia household → task.
 - Sin zona horaria por hogar: "hoy" y "vencida" se calculan en UTC (deuda para Fase 6/7).
