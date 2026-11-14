@@ -52,15 +52,16 @@ class HouseholdAccessControlIT extends HouseholdApiSupport {
     }
 
     /**
-     * Ingresos, gastos y facturas: el guard de membresía va antes de buscar el recurso, así que basta
-     * un ID cualquiera (el aislamiento de recursos concretos se prueba en {@code IncomeIT},
-     * {@code ExpenseIT} e {@code InvoiceIT}).
+     * Ingresos, gastos, tareas y facturas: el guard de membresía va antes de buscar el recurso, así que
+     * basta un ID cualquiera (el aislamiento de recursos concretos se prueba en {@code IncomeIT},
+     * {@code ExpenseIT}, {@code TaskIT} e {@code InvoiceIT}).
      * Los cuerpos son válidos para que la validación (400) no tape el 404.
      */
     static final UUID ANY_ID = UUID.randomUUID();
     static final Map<String, Object> INCOME_BODY = Map.of("amount", "10.00", "concept", "x", "date", "2026-03-01");
     static final Map<String, Object> EXPENSE_BODY =
             Map.of("amount", "10.00", "description", "x", "category", "RENT", "date", "2026-03-01");
+    static final Map<String, Object> TASK_BODY = Map.of("title", "x", "recurrence", "NONE");
 
     /** Factura: multipart con un PDF válido, para que nada antes del guard responda otra cosa. */
     static final String INVOICE_PATH = "/api/households/{h}/expenses/" + ANY_ID + "/invoice";
@@ -87,6 +88,14 @@ class HouseholdAccessControlIT extends HouseholdApiSupport {
             new Endpoint(HttpMethod.GET, "/api/households/{h}/expenses/" + ANY_ID, null, false),
             new Endpoint(HttpMethod.PUT, "/api/households/{h}/expenses/" + ANY_ID, EXPENSE_BODY, false),
             new Endpoint(HttpMethod.DELETE, "/api/households/{h}/expenses/" + ANY_ID, null, false),
+            new Endpoint(HttpMethod.POST, "/api/households/{h}/tasks", TASK_BODY, false),
+            new Endpoint(HttpMethod.GET, "/api/households/{h}/tasks", null, false),
+            new Endpoint(HttpMethod.GET, "/api/households/{h}/tasks/" + ANY_ID, null, false),
+            new Endpoint(HttpMethod.PUT, "/api/households/{h}/tasks/" + ANY_ID, TASK_BODY, false),
+            new Endpoint(HttpMethod.DELETE, "/api/households/{h}/tasks/" + ANY_ID, null, false),
+            new Endpoint(HttpMethod.POST, "/api/households/{h}/tasks/" + ANY_ID + "/complete", null, false),
+            new Endpoint(HttpMethod.POST, "/api/households/{h}/tasks/" + ANY_ID + "/reopen", null, false),
+            new Endpoint(HttpMethod.GET, "/api/households/{h}/tasks/" + ANY_ID + "/completions", null, false),
             new Endpoint(HttpMethod.POST, INVOICE_PATH, INVOICE_BODY, false),
             new Endpoint(HttpMethod.GET, INVOICE_PATH, null, false),
             new Endpoint(HttpMethod.GET, INVOICE_PATH + "/metadata", null, false),

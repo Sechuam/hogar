@@ -56,8 +56,11 @@ class SmokeIT extends AbstractIntegrationTest {
     void tamperedAccessTokenIsRejected() {
         TestUser user = users().create("Ana");
         String token = user.accessToken();
-        // Cambia el último carácter de la firma.
-        String tampered = token.substring(0, token.length() - 1) + (token.endsWith("A") ? "B" : "A");
+        // Cambia un carácter del centro de la firma: el último de una firma HS256 en base64url
+        // solo lleva 4 bits útiles y cambiarlo (B→A) puede no alterar los bytes decodificados.
+        int signatureStart = token.lastIndexOf('.') + 1;
+        int pos = signatureStart + (token.length() - signatureStart) / 2;
+        String tampered = token.substring(0, pos) + (token.charAt(pos) == 'A' ? 'B' : 'A') + token.substring(pos + 1);
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth(tampered);
 

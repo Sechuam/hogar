@@ -273,7 +273,56 @@ Ante una violación de integridad se registran solo `SQLState` y nombre de la re
 mensaje de PostgreSQL ("Failing row contains (...)", "Key (email)=(...)") puede incluir datos
 personales.
 
-**Deuda conocida (Fase 2):** las fechas de gastos e ingresos no tienen rango (se admite el año
-9999); `GET /incomes` muestra también ingresos de ex-miembros (no cuentan en el reparto ni en el
+**Deuda conocida (Fase 2):** ~~las fechas de gastos e ingresos no tienen rango~~ (resuelto en D-047);
+`GET /incomes` muestra también ingresos de ex-miembros (no cuentan en el reparto ni en el
 resumen); una baja de miembro simultánea a un alta de gasto en la que es pagador no está
 serializada; si un ex-miembro vuelve, sus ingresos recurrentes antiguos vuelven a contar.
+
+## D-047 · Fechas de la API entre los años 1 y 9999 — Aceptada (Fase 3)
+**Contexto:** QA de tareas comprobó que PostgreSQL guarda fechas a.C. pero el driver JDBC las lee
+mal (`-0100-03-31` vuelve como `0101-03-31`; `0000-02-29` ni se puede leer y deja el listado del
+hogar en 500) y que los años de 5 cifras fallan al insertar (409 `data-conflict`).
+**Decisión:** `JacksonConfig` rechaza cualquier `LocalDate` de entrada fuera de
+`0001-01-01..9999-12-31` como `validation-error` del campo, en toda la API (amplía D-045). Completar
+una tarea cuya siguiente ocurrencia pasaría de 9999 → 422 `task-schedule-exhausted`: la API nunca
+devuelve una fecha que ella misma rechazaría.
+**Alternativas:** validar en cada DTO (repetitivo y fácil de olvidar en features nuevas).
+
+## D-048 · Texto obligatorio con `@HasText` — Aceptada (Fase 3)
+`@NotBlank` usa `trim()` (solo `<= U+0020`) y las entidades `String.isBlank()` (todo
+`Character.isWhitespace`): un título de espacios Unicode pasaba la validación y la entidad lo
+rechazaba con un 500. `shared.validation.HasText` aplica la semántica de `isBlank()` con un
+patrón posesivo (coste lineal) y se usa en todos los textos obligatorios. Además
+`PageResponse.MAX_PAGE` (`Integer.MAX_VALUE / 100`) acota `page` en todos los listados: por encima,
+Spring Data fallaba con 500.
+
+## D-049 · Periodicidad calculada desde una fecha ancla — Aceptada (Fase 3)
+**Contexto:** sumar un mes a la fecha anterior deriva (31-ene → 28-feb → 28-mar…).
+**Decisión:** la tarea guarda `anchor_date`; la ocurrencia `k` es `ancla + k·periodo` (k ≥ 0) y la
+siguiente es la menor posterior a `max(dueDate, hoy)`. Completar tarde salta a la siguiente
+futura (sin atrasos acumulados); completar antes avanza un periodo. El ancla solo cambia cuando un
+PUT cambia `dueDate` o `recurrence`. Cálculo O(1) con `ChronoUnit` y ajuste, probado con 20 000
+casos aleatorios por periodicidad.
+
+## D-050 · Completar es idempotente frente a dobles toques — Aceptada (Fase 3)
+`complete` bloquea la fila (como D-044) y acepta un `dueDate` opcional: si no coincide con la
+ocurrencia actual → 409 `task-occurrence-mismatch`. Dos toques o dos miembros a la vez producen un
+200 y un 409, nunca dos avances. Cualquier miembro activo puede completar (ayudar a otro): el
+histórico guarda quién la hizo y quién estaba asignado.
+
+## D-051 · Rotación sobre miembros activos, sin acoplar household → task — Aceptada (Fase 3)
+Al completar, el siguiente asignado es el primer miembro **activo** después del actual en la lista
+(circular); si no queda ninguno, la tarea queda sin asignar. Quien deja el hogar conserva sus tareas
+asignadas hasta que alguien las edite o la rotación pase de largo: así la feature de hogares no
+depende de la de tareas. Un PUT exige que asignado y rotación sean miembros activos (422).
+La rotación se guarda en `task_rotation_members` con `UNIQUE(task_id, user_id)` diferido (D-038).
+
+## D-052 · Orden `NULLS LAST` dentro de la `Specification` — Aceptada (Fase 3)
+Spring Data JPA 3.5 no admite `Sort.nullsLast()` con consultas criteria. El listado de tareas
+(`due_date ASC NULLS LAST, created_at, id`) fija el orden en la propia `Specification` con
+`HibernateCriteriaBuilder`; el `Sort` del `Pageable` se ignora, como en gastos (D-039).
+
+**Deuda conocida (Fase 3):** "hoy" y "vencida" en UTC (sin zona horaria por hogar); PUT sin
+versión/`If-Match` (un PUT con datos viejos tras un `complete` re-ancla en la fecha antigua; mismo
+diseño que gastos); PUT con `assigneeId` nulo en una tarea con rotación reinicia el turno a
+`rotation[0]`; una baja de miembro simultánea a asignarle una tarea no está serializada.
