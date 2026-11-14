@@ -52,9 +52,9 @@ class HouseholdAccessControlIT extends HouseholdApiSupport {
     }
 
     /**
-     * Ingresos, gastos, tareas y facturas: el guard de membresía va antes de buscar el recurso, así que
+     * Ingresos, gastos, tareas, facturas y liquidaciones: el guard de membresía va antes de buscar el recurso, así que
      * basta un ID cualquiera (el aislamiento de recursos concretos se prueba en {@code IncomeIT},
-     * {@code ExpenseIT}, {@code TaskIT} e {@code InvoiceIT}).
+     * {@code ExpenseIT}, {@code TaskIT}, {@code InvoiceIT} y {@code SettlementIT}).
      * Los cuerpos son válidos para que la validación (400) no tape el 404.
      */
     static final UUID ANY_ID = UUID.randomUUID();
@@ -62,6 +62,8 @@ class HouseholdAccessControlIT extends HouseholdApiSupport {
     static final Map<String, Object> EXPENSE_BODY =
             Map.of("amount", "10.00", "description", "x", "category", "RENT", "date", "2026-03-01");
     static final Map<String, Object> TASK_BODY = Map.of("title", "x", "recurrence", "NONE");
+    static final Map<String, Object> SETTLEMENT_BODY = Map.of("fromUserId", ANY_ID.toString(),
+            "toUserId", UUID.randomUUID().toString(), "amount", "10.00", "date", "2026-03-01");
 
     /** Factura: multipart con un PDF válido, para que nada antes del guard responda otra cosa. */
     static final String INVOICE_PATH = "/api/households/{h}/expenses/" + ANY_ID + "/invoice";
@@ -99,7 +101,13 @@ class HouseholdAccessControlIT extends HouseholdApiSupport {
             new Endpoint(HttpMethod.POST, INVOICE_PATH, INVOICE_BODY, false),
             new Endpoint(HttpMethod.GET, INVOICE_PATH, null, false),
             new Endpoint(HttpMethod.GET, INVOICE_PATH + "/metadata", null, false),
-            new Endpoint(HttpMethod.DELETE, INVOICE_PATH, null, false));
+            new Endpoint(HttpMethod.DELETE, INVOICE_PATH, null, false),
+            new Endpoint(HttpMethod.GET, "/api/households/{h}/balances", null, false),
+            new Endpoint(HttpMethod.GET, "/api/households/{h}/settlements/suggested", null, false),
+            new Endpoint(HttpMethod.POST, "/api/households/{h}/settlements", SETTLEMENT_BODY, false),
+            new Endpoint(HttpMethod.GET, "/api/households/{h}/settlements", null, false),
+            new Endpoint(HttpMethod.GET, "/api/households/{h}/settlements/" + ANY_ID, null, false),
+            new Endpoint(HttpMethod.DELETE, "/api/households/{h}/settlements/" + ANY_ID, null, false));
 
     private static MultiValueMap<String, Object> invoiceBody() {
         HttpHeaders part = new HttpHeaders();
