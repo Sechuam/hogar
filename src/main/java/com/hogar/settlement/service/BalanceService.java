@@ -24,6 +24,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -32,6 +33,12 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>Orden de presentación: miembros activos por fecha de alta (aunque estén a 0) y después
  * ex-miembros con algún movimiento, por {@code userId} como texto (D-041).
+ *
+ * <p>Las lecturas usan {@code REPEATABLE READ}: el cálculo hace varias sumas en sentencias distintas
+ * (pagado, partes, enviado, recibido) y en {@code READ COMMITTED} cada una ve su propia foto. Un
+ * gasto editado o creado entre dos de ellas daba Σ pagado ≠ Σ debido → {@code IllegalStateException}
+ * → 500. Con una única foto por transacción el resultado siempre cuadra (PostgreSQL no aborta
+ * transacciones de solo lectura en este nivel).
  */
 @Service
 public class BalanceService {
@@ -49,7 +56,7 @@ public class BalanceService {
         this.settlements = settlements;
     }
 
-    @Transactional(readOnly = true)
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public BalanceResponse balances(UUID householdId, UUID userId) {
         guard.requireMember(householdId, userId);
         HouseholdSplitInfo info = households.getSplitInfo(householdId);
@@ -71,7 +78,7 @@ public class BalanceService {
     }
 
     /** Pagos que dejarían el hogar saldado; incluye a los ex-miembros con saldo. */
-    @Transactional(readOnly = true)
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public SuggestedTransfersResponse suggestions(UUID householdId, UUID userId) {
         guard.requireMember(householdId, userId);
         HouseholdSplitInfo info = households.getSplitInfo(householdId);
