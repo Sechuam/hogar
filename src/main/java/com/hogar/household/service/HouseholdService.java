@@ -6,6 +6,7 @@ import com.hogar.household.domain.Membership;
 import com.hogar.household.dto.CreateHouseholdRequest;
 import com.hogar.household.dto.HouseholdResponse;
 import com.hogar.household.dto.UpdateHouseholdRequest;
+import com.hogar.household.repository.ActiveMemberCount;
 import com.hogar.household.repository.HouseholdRepository;
 import com.hogar.household.repository.MembershipRepository;
 import java.time.Clock;
@@ -45,16 +46,24 @@ public class HouseholdService {
         return HouseholdMapper.toResponse(household, HouseholdRole.OWNER, 1);
     }
 
-    /** Hogares donde el usuario tiene membresía activa, en orden de alta. */
+    /**
+     * Hogares donde el usuario tiene membresía activa, en orden de alta. Número de consultas
+     * constante (membresías, hogares y recuentos agregados) sea cual sea el número de hogares.
+     */
     @Transactional(readOnly = true)
     public List<HouseholdResponse> listMine(UUID userId) {
         List<Membership> mine = memberships.findActiveByUserId(userId);
-        Map<UUID, Household> byId = households.findAllById(mine.stream().map(Membership::getHouseholdId).toList())
-                .stream()
+        if (mine.isEmpty()) {
+            return List.of();
+        }
+        List<UUID> ids = mine.stream().map(Membership::getHouseholdId).toList();
+        Map<UUID, Household> byId = households.findAllById(ids).stream()
                 .collect(Collectors.toMap(Household::getId, Function.identity()));
+        Map<UUID, Long> counts = memberships.countActiveByHouseholdIds(ids).stream()
+                .collect(Collectors.toMap(ActiveMemberCount::householdId, ActiveMemberCount::activeMembers));
         return mine.stream()
                 .map(m -> HouseholdMapper.toResponse(byId.get(m.getHouseholdId()), m.getRole(),
-                        memberships.countActive(m.getHouseholdId())))
+                        counts.getOrDefault(m.getHouseholdId(), 0L)))
                 .toList();
     }
 

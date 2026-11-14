@@ -3,7 +3,9 @@ package com.hogar.household.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.hogar.household.domain.Household;
@@ -13,6 +15,7 @@ import com.hogar.household.domain.SplitPolicy;
 import com.hogar.household.dto.CreateHouseholdRequest;
 import com.hogar.household.dto.HouseholdResponse;
 import com.hogar.household.dto.UpdateHouseholdRequest;
+import com.hogar.household.repository.ActiveMemberCount;
 import com.hogar.household.repository.HouseholdRepository;
 import com.hogar.household.repository.MembershipRepository;
 import com.hogar.shared.error.DomainException;
@@ -76,14 +79,25 @@ class HouseholdServiceTest {
         when(memberships.findActiveByUserId(userId)).thenReturn(List.of(
                 Membership.owner(a.getId(), userId, NOW), Membership.member(b.getId(), userId, NOW)));
         when(households.findAllById(List.of(a.getId(), b.getId()))).thenReturn(List.of(b, a));
-        when(memberships.countActive(a.getId())).thenReturn(1L);
-        when(memberships.countActive(b.getId())).thenReturn(3L);
+        when(memberships.countActiveByHouseholdIds(List.of(a.getId(), b.getId()))).thenReturn(List.of(
+                new ActiveMemberCount(b.getId(), 3L), new ActiveMemberCount(a.getId(), 1L)));
 
         List<HouseholdResponse> list = service.listMine(userId);
 
         assertThat(list).extracting(HouseholdResponse::name).containsExactly("A", "B");
         assertThat(list).extracting(HouseholdResponse::myRole).containsExactly(HouseholdRole.OWNER, HouseholdRole.MEMBER);
         assertThat(list).extracting(HouseholdResponse::memberCount).containsExactly(1, 3);
+        verify(memberships, never()).countActive(any());
+    }
+
+    @Test
+    void listWithoutMembershipsSkipsHouseholdAndCountQueries() {
+        when(memberships.findActiveByUserId(userId)).thenReturn(List.of());
+
+        assertThat(service.listMine(userId)).isEmpty();
+
+        verifyNoInteractions(households);
+        verify(memberships, never()).countActiveByHouseholdIds(any());
     }
 
     @Test

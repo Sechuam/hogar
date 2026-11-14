@@ -1,5 +1,7 @@
 package com.hogar.task.dto;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.hogar.shared.validation.HasText;
 import com.hogar.task.domain.Task;
 import com.hogar.task.domain.TaskRecurrence;
@@ -26,24 +28,40 @@ import java.util.UUID;
  * @param rotation   orden de rotación (miembros activos, sin repetidos, 2–20); solo en tareas recurrentes.
  *                   {@code null} o vacía = sin rotación
  */
+@Schema(description = "Alta o reemplazo de una tarea.")
 public record TaskRequest(
+        @Schema(description = "Título (máx. 100), con algún carácter no blanco.", example = "Sacar la basura")
         @NotNull @HasText @Size(max = 100) String title,
+        @Schema(description = "Descripción opcional (máx. 1000); en blanco se guarda como null.",
+                example = "Orgánico y envases, antes de las 21:00")
         @Size(max = 1000) String description,
+        @Schema(description = "Miembro activo responsable; ausente = sin asignar, o el primero de rotation si hay rotación.",
+                example = "7b2e4c1a-9d3f-4e6a-8b5c-2d1e0f9a8b7c")
         UUID assigneeId,
+        @Schema(description = "Periodicidad: NONE (puntual), DAILY, WEEKLY o MONTHLY.", example = "WEEKLY")
         @NotNull TaskRecurrence recurrence,
+        @Schema(description = "Fecha límite; obligatoria si es recurrente (fija también el ancla de la periodicidad). Entre 0001-01-01 y 9999-12-31.",
+                example = "2026-03-20")
         LocalDate dueDate,
+        @Schema(description = "Orden de rotación: 2–20 miembros activos distintos, solo en tareas recurrentes. Ausente o vacía = sin rotación.")
         @Size(max = 20) List<@NotNull UUID> rotation) {
 
+    @JsonIgnore
+    @Schema(hidden = true)
     @AssertTrue(message = "las tareas recurrentes necesitan dueDate")
     public boolean isDueDateValid() {
         return recurrence == null || recurrence == TaskRecurrence.NONE || dueDate != null;
     }
 
+    @JsonIgnore
+    @Schema(hidden = true)
     @AssertTrue(message = "dueDate debe estar entre 0001-01-01 y 9999-12-31")
     public boolean isDueDateInRange() {
         return dueDate == null || !(dueDate.isBefore(Task.MIN_DUE_DATE) || dueDate.isAfter(Task.MAX_DUE_DATE));
     }
 
+    @JsonIgnore
+    @Schema(hidden = true)
     @AssertTrue(message = "la rotación solo se admite en tareas recurrentes, con al menos 2 miembros distintos")
     public boolean isRotationValid() {
         if (rotation == null || rotation.isEmpty()) {
@@ -54,6 +72,8 @@ public record TaskRequest(
                 && new HashSet<>(rotation).size() == rotation.size();
     }
 
+    @JsonIgnore
+    @Schema(hidden = true)
     public List<UUID> rotationOrEmpty() {
         return rotation == null ? List.of() : rotation;
     }

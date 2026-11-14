@@ -14,6 +14,9 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -140,6 +143,27 @@ class InvitationIT extends HouseholdApiSupport {
     }
 
     @Test
+    void locationOfACreatedInvitationCanBeFetchedOnlyByItsHouseholdOwner() {
+        TestUser ana = users().create("Ana");
+        TestUser luis = users().create("Luis");
+        UUID id = createHousehold(ana, "Piso").id();
+        ResponseEntity<String> created = call(HttpMethod.POST, invitationsPath(id), ana, null);
+        assertThat(created.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        InvitationResponse invitation = read(created, InvitationResponse.class);
+        String location = created.getHeaders().getLocation().getPath();
+
+        assertThat(location).isEqualTo(invitationsPath(id) + "/" + invitation.id());
+        assertThat(read(get(location, ana), InvitationResponse.class)).isEqualTo(invitation);
+        assertThat(accept(luis, invitation.code()).getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertProblem(get(location, luis), HttpStatus.FORBIDDEN, "owner-role-required");
+
+        TestUser eva = users().create("Eva");
+        UUID evas = createHousehold(eva, "De Eva").id();
+        assertProblem(get(invitationsPath(evas) + "/" + invitation.id(), eva), HttpStatus.NOT_FOUND,
+                "invitation-not-found");
+    }
+
+    @Test
     void unknownCodeIs404() {
         TestUser luis = users().create("Luis");
 
@@ -174,5 +198,29 @@ class InvitationIT extends HouseholdApiSupport {
 
         InvitationResponse max = invite(ana, id, 720, null);
         assertThat(Duration.between(max.createdAt(), max.expiresAt())).isEqualTo(Duration.ofDays(30));
+    }
+
+    @Test
+    void listingKeepsEveryPendingInvitationButOnlyTheMostRecentHistory() {
+        TestUser ana = users().create("Ana");
+        UUID id = createHousehold(ana, "Piso").id();
+        InvitationResponse oldestPending = invite(ana, id, null, null);
+        List<UUID> revoked = new ArrayList<>();
+        for (int i = 0; i < 22; i++) {
+            InvitationResponse invitation = invite(ana, id, null, null);
+            ResponseEntity<String> revoke = call(HttpMethod.DELETE, invitationsPath(id) + "/" + invitation.id(), ana, null);
+            assertThat(revoke.getStatusCode()).as(revoke.getBody()).isEqualTo(HttpStatus.NO_CONTENT);
+            revoked.add(invitation.id());
+        }
+        InvitationResponse newestPending = invite(ana, id, null, null);
+
+        InvitationResponse[] list = read(get(invitationsPath(id), ana), InvitationResponse[].class);
+
+        // 2 vigentes + las 20 revocadas más recientes; las 2 revocadas más antiguas quedan fuera.
+        assertThat(list).hasSize(22);
+        assertThat(list[0].id()).isEqualTo(newestPending.id());
+        assertThat(list[list.length - 1].id()).isEqualTo(oldestPending.id());
+        assertThat(list).extracting(InvitationResponse::id).doesNotContain(revoked.get(0), revoked.get(1));
+        assertThat(list).extracting(InvitationResponse::createdAt).isSortedAccordingTo(Comparator.reverseOrder());
     }
 }

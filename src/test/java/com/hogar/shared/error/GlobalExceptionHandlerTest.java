@@ -7,13 +7,18 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
+import com.hogar.shared.web.RequestIdFilter;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Positive;
 import java.math.BigDecimal;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.MDC;
 import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.http.ProblemDetail;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -56,6 +61,23 @@ class GlobalExceptionHandlerTest {
     void forbiddenAndConflictMapToTheirStatus() throws Exception {
         mvc.perform(get("/fake/forbidden")).andExpect(status().isForbidden());
         mvc.perform(get("/fake/conflict")).andExpect(status().isConflict());
+    }
+
+    @Test
+    void serviceUnavailableIs503WithItsCode() throws Exception {
+        mvc.perform(get("/fake/unavailable"))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value("google-unavailable"));
+    }
+
+    /** Un {@code @PreAuthorize} o regla de Spring Security que se lance dentro del controller. */
+    @Test
+    void springAccessDeniedIs403ProblemWithoutInternals() throws Exception {
+        mvc.perform(get("/fake/access-denied"))
+                .andExpect(status().isForbidden())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.code").value("forbidden"))
+                .andExpect(jsonPath("$.detail").value("No tienes permisos para realizar esta acción."));
     }
 
     @Test
@@ -121,6 +143,47 @@ class GlobalExceptionHandlerTest {
                 .andExpect(jsonPath("$.detail").value("Se ha producido un error inesperado."));
     }
 
+    @Test
+    void problemsIncludeRequestIdFromMdc() throws Exception {
+        MDC.put(RequestIdFilter.MDC_KEY, "req-42");
+        try {
+            mvc.perform(get("/fake/not-found"))
+                    .andExpect(jsonPath("$.requestId").value("req-42"));
+            // Generado por Spring MVC (createResponseEntity): conserva code y añade requestId.
+            mvc.perform(post("/fake/validate").contentType(MediaType.APPLICATION_JSON).content("{not json"))
+                    .andExpect(jsonPath("$.code").value("bad-request"))
+                    .andExpect(jsonPath("$.requestId").value("req-42"));
+            mvc.perform(post("/fake/validate").contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"\"}"))
+                    .andExpect(jsonPath("$.code").value("validation-error"))
+                    .andExpect(jsonPath("$.requestId").value("req-42"));
+            mvc.perform(get("/fake/no-such-route"))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.code").value("not-found"))
+                    .andExpect(jsonPath("$.requestId").value("req-42"));
+        } finally {
+            MDC.remove(RequestIdFilter.MDC_KEY);
+        }
+    }
+
+    @Test
+    void withoutRequestInProgressThereIsNoRequestId() throws Exception {
+        mvc.perform(get("/fake/not-found"))
+                .andExpect(jsonPath("$.requestId").doesNotExist());
+    }
+
+    @Test
+    void withRequestIdDoesNotOverwriteExistingValue() {
+        MDC.put(RequestIdFilter.MDC_KEY, "nuevo");
+        try {
+            ProblemDetail problem = ProblemDetail.forStatus(400);
+            problem.setProperty(Problems.REQUEST_ID, "original");
+
+            assertThat(Problems.withRequestId(problem).getProperties()).containsEntry("requestId", "original");
+        } finally {
+            MDC.remove(RequestIdFilter.MDC_KEY);
+        }
+    }
+
     record FakeRequest(@NotBlank String name, @Positive BigDecimal amount) {
     }
 
@@ -164,6 +227,16 @@ class GlobalExceptionHandlerTest {
         @GetMapping("/fake/integrity")
         void integrity() {
             throw new org.springframework.dao.DataIntegrityViolationException("duplicate key uk_users_email");
+        }
+
+        @GetMapping("/fake/unavailable")
+        void unavailable() {
+            throw new ServiceUnavailableException("google-unavailable", "Google no responde");
+        }
+
+        @GetMapping("/fake/access-denied")
+        void accessDenied() {
+            throw new org.springframework.security.access.AccessDeniedException("regla interna hasRole('X')");
         }
 
         @GetMapping("/fake/boom")

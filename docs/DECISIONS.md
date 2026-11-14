@@ -401,3 +401,46 @@ la fila, así dos borrados simultáneos dan 204 + 404 en vez de 409.
 puede consultar su saldo (ya no es miembro); clientes que lean importes como `double` perderían
 precisión por encima de ~9·10^13 €; los DTO con `@AssertTrue` (`distinctParties`, `endDateValid`…)
 aparecen como propiedad al serializarse (inocuo en la entrada; a revisar con OpenAPI en la Fase 6).
+
+## D-062 · Observabilidad con request id, logs ECS y métricas aparte — Aceptada (Fase 6)
+**Decisión:** `RequestIdFilter` (antes de Spring Security) reutiliza un `X-Request-Id` válido
+(`[A-Za-z0-9._-]{1,64}`) o genera un UUID; va a la respuesta, al MDC y a todo `ProblemDetail`
+(`requestId`). Un valor no válido se sustituye, no se sanea (sin inyección en logs ni cabeceras). Logs
+JSON en formato ECS fuera de `dev`/`test` (esquema abierto que leen Elastic y OpenTelemetry) y perfil
+`docker` propio en Compose. Actuator (`health`, `info`, `metrics`, `prometheus`) en
+`management.server.port` (8081), no publicado; las probes públicas son `/livez` y `/readyz`.
+**Alternativas:** métricas en el puerto público tras JWT (Prometheus no se autentica con JWT).
+
+## D-063 · Seguridad del puerto de gestión por puerto local — Aceptada (Fase 6)
+Boot aplica la cadena de seguridad principal también al puerto de gestión. `ManagementSecurityConfig`
+abre Actuator solo para conexiones que llegan al puerto de gestión, decidido por el **puerto local de
+la conexión** (no falsificable con `Host` o `X-Forwarded-Port`) y solo si es distinto del puerto de la
+API. QA final encontró que, con ambos puertos iguales, Boot publica `local.management.port` como alias
+y la cadena abierta capturaba toda la API (sin JWT): ahora se exige que los puertos difieran, con IT
+que arranca la app así.
+
+## D-064 · Documentación OpenAPI verificada por test — Aceptada (Fase 6)
+Cada endpoint lleva `summary`, parámetros y sus `code` de error; un `OpenApiCustomizer` añade 401/500
+comunes, el esquema `ProblemDetail` y ejemplos por código sin repetir anotaciones. `OpenApiDocumentIT`
+compara el documento con los mappings reales de Spring MVC en ambos sentidos: un endpoint nuevo sin
+documentar rompe la build. Los métodos `@AssertTrue` de los DTO se ocultan (`@JsonIgnore` +
+`@Schema(hidden)`); la validación y los nombres de campo de `errors[]` no cambian.
+
+## D-065 · Listados de hogar acotados sin paginar — Aceptada (Fase 6)
+`GET /api/households` usa un recuento agregado (3 consultas siempre; cierra la deuda de D-033). Los
+miembros no se paginan por su tamaño natural (si hiciera falta un límite, sería un tope por plan
+FREE/PREMIUM). Las invitaciones devuelven todas las vigentes (tope defensivo 100) y las 20 inactivas más
+recientes: el historial dejaba de crecer sin límite sin cambiar la forma de la respuesta. El `Location`
+del alta de una invitación apunta ahora a `GET …/invitations/{id}` (antes daba 405).
+
+## D-066 · Contraseñas medidas en bytes UTF-8 y CORS sin configurar — Aceptada (Fase 6)
+BCrypt solo admite 72 **bytes**; `@Size(max = 72)` cuenta caracteres y una contraseña con acentos daba
+500. `@MaxUtf8Bytes(72)` lo convierte en `validation-error`. CORS no se configura: el cliente previsto es
+una app nativa, y sin cabeceras CORS ningún navegador de otro origen puede leer respuestas.
+
+**Deuda y plan de despliegue (Fase 6):** detrás de un proxy inverso hay que activar
+`server.forward-headers-strategy=native` con `server.tomcat.remoteip.internal-proxies` limitado a la IP
+del proxy; si no, todos los clientes comparten la IP del proxy y el cupo por IP del rate limit (D-023)
+pasa a ser global (sin ello, rotar `X-Forwarded-For` no da cupos nuevos: probado). HSTS y CSP los debe
+poner el proxy TLS (la app no ve `https` sin forward headers). Sin análisis de CVE automático en CI
+(Dependabot / OWASP dependency-check). Rate limit por instancia. Sin borrado de cuenta (RGPD).

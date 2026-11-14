@@ -11,11 +11,16 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -25,6 +30,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
+import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
 
 /**
  * Matriz de control de acceso de todos los endpoints bajo {@code /api/households/{id}/**}.
@@ -78,6 +84,7 @@ class HouseholdAccessControlIT extends HouseholdApiSupport {
             new Endpoint(HttpMethod.POST, "/api/households/{h}/leave", null, false),
             new Endpoint(HttpMethod.POST, "/api/households/{h}/invitations", Map.of("maxUses", 1), true),
             new Endpoint(HttpMethod.GET, "/api/households/{h}/invitations", null, true),
+            new Endpoint(HttpMethod.GET, "/api/households/{h}/invitations/{i}", null, true),
             new Endpoint(HttpMethod.DELETE, "/api/households/{h}/invitations/{i}", null, true),
             new Endpoint(HttpMethod.POST, "/api/households/{h}/incomes", INCOME_BODY, false),
             new Endpoint(HttpMethod.GET, "/api/households/{h}/incomes", null, false),
@@ -108,6 +115,41 @@ class HouseholdAccessControlIT extends HouseholdApiSupport {
             new Endpoint(HttpMethod.GET, "/api/households/{h}/settlements", null, false),
             new Endpoint(HttpMethod.GET, "/api/households/{h}/settlements/" + ANY_ID, null, false),
             new Endpoint(HttpMethod.DELETE, "/api/households/{h}/settlements/" + ANY_ID, null, false));
+
+    private static final String UUID_REGEX = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+
+    @Autowired
+    @Qualifier("requestMappingHandlerMapping")
+    private RequestMappingHandlerMapping handlerMapping;
+
+    /**
+     * Red de seguridad de la propia matriz: cada endpoint real bajo {@code /api/households/{id}/...}
+     * (mappings de Spring MVC) debe estar en {@link #ENDPOINTS}, y la matriz no puede probar rutas que
+     * ya no existen. Si falla tras añadir un endpoint, añádelo a la matriz.
+     */
+    @Test
+    void matrixCoversEveryEndpointUnderAHousehold() {
+        Set<String> mapped = handlerMapping.getHandlerMethods().keySet().stream()
+                .flatMap(info -> info.getPatternValues().stream()
+                        .filter(pattern -> pattern.startsWith("/api/households/{"))
+                        .flatMap(pattern -> info.getMethodsCondition().getMethods().stream()
+                                .map(method -> method.name() + " " + normalize(pattern))))
+                .collect(Collectors.toSet());
+        Set<String> inMatrix = ENDPOINTS.stream()
+                .map(endpoint -> endpoint.method().name() + " " + normalize(endpoint.template()))
+                .collect(Collectors.toSet());
+
+        assertThat(mapped).as("mappings bajo un hogar").hasSizeGreaterThanOrEqualTo(39);
+        assertThat(inMatrix).as("endpoints de la matriz frente a los mappings reales")
+                .containsExactlyInAnyOrderElementsOf(mapped);
+    }
+
+    /** Variables de ruta ({@code {householdId}}, {@code {h}}) e IDs concretos → {@code {}}; sin query string. */
+    private static String normalize(String path) {
+        return path.replaceFirst("\\?.*$", "")
+                .replaceAll("\\{[^}]+}", "{}")
+                .replaceAll(UUID_REGEX, "{}");
+    }
 
     private static MultiValueMap<String, Object> invoiceBody() {
         HttpHeaders part = new HttpHeaders();

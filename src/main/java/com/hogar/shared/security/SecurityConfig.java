@@ -27,7 +27,13 @@ import org.springframework.security.web.access.AccessDeniedHandler;
 @Configuration(proxyBeanMethods = false)
 public class SecurityConfig {
 
+    /**
+     * {@code /livez} y {@code /readyz} son las probes de health publicadas en el puerto de la
+     * aplicación; el resto de Actuator vive en el puerto de gestión ({@link ManagementSecurityConfig}).
+     * Las rutas {@code /actuator/health|info} se mantienen por si ambos puertos coinciden.
+     */
     static final String[] PUBLIC_PATHS = {
+            "/livez", "/readyz",
             "/actuator/health/**", "/actuator/info",
             "/v3/api-docs/**", "/swagger-ui.html", "/swagger-ui/**",
             "/error"

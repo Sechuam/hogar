@@ -5,3 +5,4 @@ target/
 storage/
 docs/
 .claude/
+http/

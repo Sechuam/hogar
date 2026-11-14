@@ -9,7 +9,8 @@ services:
       POSTGRES_USER: ${DB_USERNAME:-hogar}
       POSTGRES_PASSWORD: ${DB_PASSWORD:?Define DB_PASSWORD en .env}
     ports:
-      - "${DB_PORT:-5432}:5432"
+      # Solo en local: la BD no queda expuesta al resto de la red.
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
     volumes:
       - db-data:/var/lib/postgresql/data
     healthcheck:
@@ -27,14 +28,27 @@ services:
       DB_URL: jdbc:postgresql://db:5432/${DB_NAME:-hogar}
       DB_USERNAME: ${DB_USERNAME:-hogar}
       DB_PASSWORD: ${DB_PASSWORD}
-      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev}
+      # Perfil propio del contenedor (no el SPRING_PROFILES_ACTIVE=dev del arranque local):
+      # cualquier perfil distinto de dev/test emite logs JSON (ECS).
+      SPRING_PROFILES_ACTIVE: ${DOCKER_SPRING_PROFILES:-docker}
       JWT_SECRET: ${JWT_SECRET:-}
       GOOGLE_CLIENT_IDS: ${GOOGLE_CLIENT_IDS:-}
       STORAGE_DIR: /app/storage
+      MANAGEMENT_PORT: 8081
+    # Solo se publica el puerto de la API. El de gestión (8081: métricas Prometheus) queda
+    # en la red interna de Compose, accesible para un Prometheus en la misma red.
     ports:
       - "${SERVER_PORT:-8080}:8080"
     volumes:
       - invoices:/app/storage
+    healthcheck:
+      # curl viene en la imagen eclipse-temurin:21-jre. /readyz es la probe de readiness
+      # publicada en el puerto de la aplicación.
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://localhost:8080/readyz"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 40s
 
 volumes:
   db-data:

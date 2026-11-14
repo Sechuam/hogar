@@ -15,6 +15,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Limit;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
@@ -86,14 +87,26 @@ class InvitationRepositoryIT extends AbstractIntegrationTest {
     }
 
     @Test
-    void listsHouseholdInvitationsNewestFirst() {
+    void separatesPendingFromInactiveNewestFirstAndOnlyThisHousehold() {
         Invitation older = invitations.saveAndFlush(
                 Invitation.create(householdId, "OLDER00001", ownerId, NOW, EXPIRES, null));
         Invitation newer = invitations.saveAndFlush(
                 Invitation.create(householdId, "NEWER00001", ownerId, NOW.plusSeconds(60), EXPIRES, null));
+        Invitation revoked = Invitation.create(householdId, "REVOK00001", ownerId, NOW.plusSeconds(30), EXPIRES, null);
+        revoked.revoke(NOW.plusSeconds(90));
+        invitations.saveAndFlush(revoked);
+        Invitation expired = invitations.saveAndFlush(Invitation.create(householdId, "EXPIR00001", ownerId,
+                NOW.minus(Duration.ofDays(10)), NOW.minus(Duration.ofDays(3)), null));
+        // Caduca justo en NOW: expiresAt es exclusivo, ya no está vigente.
+        Invitation boundary = invitations.saveAndFlush(Invitation.create(householdId, "BOUND00001", ownerId,
+                NOW.minus(Duration.ofDays(1)), NOW, null));
         UUID otherHousehold = households.saveAndFlush(Household.create("Otro", null, null, NOW)).getId();
         invitations.saveAndFlush(Invitation.create(otherHousehold, "OTHER00001", ownerId, NOW, EXPIRES, null));
+        em.clear();
 
-        assertThat(invitations.findByHouseholdIdOrderByCreatedAtDesc(householdId)).containsExactly(newer, older);
+        assertThat(invitations.findPending(householdId, NOW, Limit.of(10))).containsExactly(newer, older);
+        assertThat(invitations.findPending(householdId, NOW, Limit.of(1))).containsExactly(newer);
+        assertThat(invitations.findInactive(householdId, NOW, Limit.of(10))).containsExactly(revoked, boundary, expired);
+        assertThat(invitations.findInactive(householdId, NOW, Limit.of(2))).containsExactly(revoked, boundary);
     }
 }

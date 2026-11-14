@@ -166,14 +166,20 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 .replace(".[", "[");
     }
 
-    /** Añade {@code type} y {@code code} a los ProblemDetail que genera Spring MVC. */
+    /**
+     * Añade {@code type} y {@code code} a los ProblemDetail que genera Spring MVC (los que aún no
+     * tienen propiedades) y {@code requestId} a todos los que pasan por aquí.
+     */
     @Override
     protected ResponseEntity<Object> createResponseEntity(
             Object body, HttpHeaders headers, HttpStatusCode statusCode, WebRequest request) {
-        if (body instanceof ProblemDetail problem && problem.getProperties() == null) {
-            String code = HttpStatus.valueOf(statusCode.value()).name().toLowerCase().replace('_', '-');
-            problem.setType(URI.create(Problems.TYPE_BASE + code));
-            problem.setProperty("code", code);
+        if (body instanceof ProblemDetail problem) {
+            if (problem.getProperties() == null) {
+                String code = HttpStatus.valueOf(statusCode.value()).name().toLowerCase().replace('_', '-');
+                problem.setType(URI.create(Problems.TYPE_BASE + code));
+                problem.setProperty("code", code);
+            }
+            Problems.withRequestId(problem);
         }
         return super.createResponseEntity(body, headers, statusCode, request);
     }

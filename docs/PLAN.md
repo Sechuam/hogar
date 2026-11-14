@@ -147,7 +147,7 @@ Decisiones D-058 a D-061; contrato en `docs/api/fase-5-contratos.md`.
 
 ---
 
-## Fase 6 — Pulido ⬜
+## Fase 6 — Pulido ✅
 **Rama:** `fase-6-pulido`
 
 - OpenAPI completo (descripciones, ejemplos, esquema de seguridad bearer, ProblemDetail).
@@ -157,6 +157,13 @@ Decisiones D-058 a D-061; contrato en `docs/api/fase-5-contratos.md`.
   correlation id en MDC y cabecera `X-Request-Id`.
 - Colección de peticiones (`http/*.http` de IntelliJ/VS Code + Bruno o Postman).
 - Revisión final de `qa-tests`: cobertura, casos límite, análisis de seguridad.
+
+**Resultado:** OpenAPI de los 48 endpoints verificado contra los mappings reales; `X-Request-Id`,
+logs JSON ECS y Prometheus en puerto de gestión; sin N+1 en hogares e invitaciones acotadas; README
+con arquitectura, diagrama ER y 12 decisiones; colección `http/` probada contra Docker (73 peticiones).
+QA final: auditoría de seguridad (corregidos la API sin JWT si `MANAGEMENT_PORT` = puerto público y el
+500 con contraseñas de más de 72 bytes), matriz de acceso que falla ante endpoints nuevos, casos que
+cruzan features. Cobertura total 98 % de líneas. Decisiones D-062 a D-066.
 
 ---
 
