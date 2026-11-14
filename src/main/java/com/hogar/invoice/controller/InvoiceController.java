@@ -51,7 +51,9 @@ class InvoiceController {
 
     /**
      * Contenido binario como adjunto. {@code Content-Disposition} lo construye {@link ContentDisposition}
-     * (RFC 6266: {@code filename} + {@code filename*} en UTF-8) a partir del nombre ya saneado al subir;
+     * a partir del nombre ya saneado al subir: un nombre ASCII va tal cual en {@code filename}; uno no
+     * ASCII añade {@code filename*} en UTF-8 (RFC 6266). Con charset, Spring codifica también un nombre
+     * ASCII como palabra RFC 2047 ({@code =?UTF-8?Q?...?=}), ilegible para clientes sencillos;
      * {@code nosniff} evita que el navegador reinterprete el contenido.
      */
     @GetMapping
@@ -61,12 +63,18 @@ class InvoiceController {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.parseMediaType(metadata.contentType()));
         headers.setContentLength(metadata.sizeBytes());
-        headers.setContentDisposition(ContentDisposition.attachment()
-                .filename(metadata.filename(), StandardCharsets.UTF_8).build());
+        headers.setContentDisposition(attachment(metadata.filename()));
         headers.setCacheControl(CACHE_CONTROL);
         headers.set("X-Content-Type-Options", NOSNIFF);
         // El conversor de recursos cierra el stream al terminar de escribirlo.
         return ResponseEntity.ok().headers(headers).body(new InputStreamResource(download.content()));
+    }
+
+    static ContentDisposition attachment(String filename) {
+        boolean printableAscii = filename.chars().allMatch(c -> c >= 0x20 && c < 0x7F);
+        ContentDisposition.Builder builder = ContentDisposition.attachment();
+        return (printableAscii ? builder.filename(filename) : builder.filename(filename, StandardCharsets.UTF_8))
+                .build();
     }
 
     @GetMapping("/metadata")

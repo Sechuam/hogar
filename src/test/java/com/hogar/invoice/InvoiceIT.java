@@ -113,6 +113,11 @@ class InvoiceIT extends FinanceApiSupport {
         assertThat(headers.getContentLength()).isEqualTo(content.length);
         assertThat(headers.getContentDisposition().isAttachment()).isTrue();
         assertThat(headers.getContentDisposition().getFilename()).isEqualTo(filename);
+        if (filename.chars().allMatch(c -> c >= 0x20 && c < 0x7F)) {
+            // Nombre ASCII legible tal cual, sin palabra codificada RFC 2047.
+            assertThat(headers.getFirst(HttpHeaders.CONTENT_DISPOSITION))
+                    .isEqualTo("attachment; filename=\"" + filename + "\"");
+        }
         assertThat(headers.getCacheControl()).isEqualTo("private, no-store");
         assertThat(headers.get("X-Content-Type-Options")).containsExactly("nosniff");
     }
