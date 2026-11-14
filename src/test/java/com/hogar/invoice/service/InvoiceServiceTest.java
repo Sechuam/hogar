@@ -119,6 +119,16 @@ class InvoiceServiceTest {
                 "passwdX: y", sha256(PDF), USER, NOW));
     }
 
+    /** Lo que recorta el saneador (255 puntos de código) tiene que caber en la entidad. */
+    @Test
+    void longEmojiFilenameIsTruncatedAndStored() {
+        service.upload(HOUSEHOLD, EXPENSE, USER, "😀".repeat(300) + ".pdf", new ByteArrayResource(PDF));
+
+        Invoice saved = savedInvoice();
+        assertThat(saved.getFilename()).isEqualTo("😀".repeat(255));
+        assertThat(storageDir.resolve(saved.getStorageKey())).exists();
+    }
+
     @Test
     void uploadChecksMembershipThenLocksTheExpenseBeforeReadingTheFile() throws IOException {
         InputStreamSource content = mock(InputStreamSource.class);

@@ -102,6 +102,21 @@ class InvoiceTest {
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
+    /**
+     * El límite es de 255 <b>caracteres</b> como en PostgreSQL ({@code varchar(255)} cuenta puntos de
+     * código) y como recorta {@code FilenameSanitizer}; no de 255 unidades UTF-16. Un nombre con emojis
+     * (2 unidades UTF-16 cada uno) ya saneado no puede hacer fallar la subida con un 500.
+     */
+    @Test
+    void filenameLengthIsCountedInCodePointsLikePostgres() {
+        String max = "😀".repeat(Invoice.MAX_FILENAME_LENGTH);
+
+        assertThat(Invoice.create(HOUSEHOLD, EXPENSE, KEY, "image/png", 1, SHA, max, USER, NOW).getFilename())
+                .isEqualTo(max);
+        assertThatThrownBy(() -> Invoice.create(HOUSEHOLD, EXPENSE, KEY, "image/png", 1, SHA, max + "😀", USER, NOW))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
     @Test
     void acceptsUnicodeFilename() {
         assertThat(Invoice.create(HOUSEHOLD, EXPENSE, KEY, "image/png", 1, SHA, "factura ñandú €.png", USER, NOW)
