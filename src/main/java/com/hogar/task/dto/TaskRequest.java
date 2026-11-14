@@ -8,6 +8,7 @@ import jakarta.validation.constraints.Size;
 import java.time.LocalDate;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 
 /**
@@ -38,7 +39,7 @@ public record TaskRequest(
             return true;
         }
         return recurrence != null && recurrence != TaskRecurrence.NONE
-                && rotation.size() >= 2 && !rotation.contains(null)
+                && rotation.size() >= 2 && rotation.stream().noneMatch(Objects::isNull)
                 && new HashSet<>(rotation).size() == rotation.size();
     }
 
