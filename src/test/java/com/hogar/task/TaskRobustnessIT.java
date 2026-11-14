@@ -66,6 +66,44 @@ class TaskRobustnessIT extends TaskApiSupport {
     }
 
     @Test
+    void dueDatesOutsideYears1To9999AreValidationErrors() {
+        TestUser ana = users().create("Ana");
+        UUID h = household(ana);
+        // Antes: los años de 5+ cifras daban 409 data-conflict (DATE fuera de rango en PostgreSQL) y las
+        // fechas a.C. se guardaban pero se leían mal (101 a.C. → año 101) o no se podían leer (29-feb del
+        // año 0 → 500 en GET, listado y DELETE de esa tarea, para todo el hogar).
+        for (String date : new String[] {"\"+999999999-12-31\"", "\"+5874897-12-31\"", "\"+10000-01-01\"",
+                "\"-999999999-01-01\"", "\"-0100-03-31\"", "\"0000-02-29\"", "\"0000-12-31\""}) {
+            for (String recurrence : new String[] {"\"NONE\"", "\"DAILY\"", "\"MONTHLY\""}) {
+                assertValidationError(postJson(tasksPath(h), ana, taskJson("\"x\"", recurrence, date)),
+                        "dueDateInRange");
+            }
+        }
+        TaskResponse task = createTask(ana, h, oneOff("Fregar", null, today()));
+        assertValidationError(raw(HttpMethod.PUT, taskPath(h, task.id()), ana,
+                taskJson("\"x\"", "\"WEEKLY\"", "\"0000-02-29\""), MediaType.APPLICATION_JSON), "dueDateInRange");
+        assertThat(listTasks(ana, h, "").content()).singleElement()
+                .satisfies(t -> assertThat(t.dueDate()).isEqualTo(today()));
+    }
+
+    @Test
+    void theFirstAndLastAcceptedDatesAreStoredReadAndAdvancedExactly() {
+        TestUser ana = users().create("Ana");
+        UUID h = household(ana);
+        for (String recurrence : new String[] {"\"DAILY\"", "\"MONTHLY\""}) {
+            ResponseEntity<String> created = postJson(tasksPath(h), ana,
+                    taskJson("\"x\"", recurrence, "\"0001-01-01\""));
+            assertThat(created.getStatusCode()).as(created.getBody()).isEqualTo(HttpStatus.CREATED);
+            TaskResponse task = read(created, TaskResponse.class);
+            assertThat(getTask(ana, h, task.id()).dueDate()).isEqualTo(LocalDate.of(1, 1, 1));
+            TaskResponse next = complete(ana, h, task.id());
+            assertThat(next.dueDate()).isAfter(today());
+            assertThat(next.overdue()).isFalse();
+        }
+        assertThat(listTasks(ana, h, "?overdue=false").totalElements()).isEqualTo(2);
+    }
+
+    @Test
     void year9999DailyTaskAdvancesIntoYear10000() {
         TestUser ana = users().create("Ana");
         UUID h = household(ana);

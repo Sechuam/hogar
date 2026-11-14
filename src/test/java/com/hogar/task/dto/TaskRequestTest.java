@@ -94,4 +94,17 @@ class TaskRequestTest {
     void recurringTaskNeedsDueDate() {
         assertThat(new TaskRequest("Basura", null, null, TaskRecurrence.DAILY, null, null).isDueDateValid()).isFalse();
     }
+
+    @Test
+    void dueDateMustBeWithinYears1To9999() {
+        assertThat(invalidFields(withDue(LocalDate.of(1, 1, 1)))).isEmpty();
+        assertThat(invalidFields(withDue(LocalDate.of(9999, 12, 31)))).isEmpty();
+        assertThat(invalidFields(withDue(LocalDate.of(0, 12, 31)))).containsExactly("dueDateInRange");
+        assertThat(invalidFields(withDue(LocalDate.of(10000, 1, 1)))).containsExactly("dueDateInRange");
+        assertThat(invalidFields(new TaskRequest("x", null, null, TaskRecurrence.NONE, null, null))).isEmpty();
+    }
+
+    private static TaskRequest withDue(LocalDate due) {
+        return new TaskRequest("x", null, null, TaskRecurrence.DAILY, due, null);
+    }
 }
