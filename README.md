@@ -13,7 +13,7 @@ Plan y resultado de cada fase en [`docs/PLAN.md`](docs/PLAN.md); 61 decisiones r
 
 | | |
 |---|---|
-| Lenguaje | Java 21 (records, `switch` con patrones) |
+| Lenguaje | Java 21 (records, `switch` expressions, pattern matching de `instanceof`) |
 | Framework | Spring Boot 3.5: Web, Data JPA, Security + OAuth2 Resource Server, Validation, Actuator |
 | Datos | PostgreSQL 17, migraciones Flyway (`ddl-auto=validate`) |
 | Auth | JWT propio HS256 (Nimbus) + refresh token opaco rotatorio; login con Google (ID token + JWKS) |
