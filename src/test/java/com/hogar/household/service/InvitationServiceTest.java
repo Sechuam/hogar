@@ -26,12 +26,14 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
+import org.springframework.data.domain.Limit;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
@@ -278,5 +280,35 @@ class InvitationServiceTest {
         assertThatThrownBy(() -> service.accept(CODE, joinerId))
                 .extracting(InvitationServiceTest::codeOf).isEqualTo("invitation-not-found");
         verify(memberships, never()).save(any());
+    }
+
+    @Test
+    void listMergesPendingAndRecentHistoryNewestFirstWithBoundedQueries() {
+        givenOwner();
+        Invitation pendingOld = Invitation.create(householdId, "PEND000001", ownerId,
+                NOW.minus(Duration.ofDays(5)), NOW.plus(Duration.ofDays(20)), null);
+        Invitation pendingNew = Invitation.create(householdId, "PEND000002", ownerId,
+                NOW.minusSeconds(10), NOW.plus(Duration.ofDays(7)), null);
+        Invitation revoked = Invitation.create(householdId, "REVO000001", ownerId,
+                NOW.minus(Duration.ofDays(1)), NOW.plus(Duration.ofDays(6)), null);
+        revoked.revoke(NOW.minusSeconds(60));
+        when(invitations.findPending(householdId, NOW, Limit.of(InvitationService.MAX_PENDING_LISTED)))
+                .thenReturn(List.of(pendingNew, pendingOld));
+        when(invitations.findInactive(householdId, NOW, Limit.of(InvitationService.MAX_INACTIVE_LISTED)))
+                .thenReturn(List.of(revoked));
+
+        List<InvitationResponse> list = service.list(householdId, ownerId);
+
+        assertThat(list).extracting(InvitationResponse::code).containsExactly("PEND000002", "REVO000001", "PEND000001");
+        assertThat(list).extracting(InvitationResponse::revoked).containsExactly(false, true, false);
+    }
+
+    @Test
+    void memberCannotListInvitations() {
+        when(memberships.findActive(householdId, joinerId))
+                .thenReturn(Optional.of(Membership.member(householdId, joinerId, NOW.minusSeconds(60))));
+
+        assertThatThrownBy(() -> service.list(householdId, joinerId)).isInstanceOf(ForbiddenException.class);
+        verify(invitations, never()).findPending(any(), any(), any());
     }
 }
