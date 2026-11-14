@@ -75,13 +75,14 @@ class TaskRobustnessIT extends TaskApiSupport {
         for (String date : new String[] {"\"+999999999-12-31\"", "\"+5874897-12-31\"", "\"+10000-01-01\"",
                 "\"-999999999-01-01\"", "\"-0100-03-31\"", "\"0000-02-29\"", "\"0000-12-31\""}) {
             for (String recurrence : new String[] {"\"NONE\"", "\"DAILY\"", "\"MONTHLY\""}) {
+                // Lo rechaza ya la deserialización global de fechas (D-047), como error del campo.
                 assertValidationError(postJson(tasksPath(h), ana, taskJson("\"x\"", recurrence, date)),
-                        "dueDateInRange");
+                        "dueDate");
             }
         }
         TaskResponse task = createTask(ana, h, oneOff("Fregar", null, today()));
         assertValidationError(raw(HttpMethod.PUT, taskPath(h, task.id()), ana,
-                taskJson("\"x\"", "\"WEEKLY\"", "\"0000-02-29\""), MediaType.APPLICATION_JSON), "dueDateInRange");
+                taskJson("\"x\"", "\"WEEKLY\"", "\"0000-02-29\""), MediaType.APPLICATION_JSON), "dueDate");
         assertThat(listTasks(ana, h, "").content()).singleElement()
                 .satisfies(t -> assertThat(t.dueDate()).isEqualTo(today()));
     }
@@ -104,16 +105,18 @@ class TaskRobustnessIT extends TaskApiSupport {
     }
 
     @Test
-    void year9999DailyTaskAdvancesIntoYear10000() {
+    void completingPastYear9999IsRejectedAndLeavesTheTaskUntouched() {
         TestUser ana = users().create("Ana");
         UUID h = household(ana);
         TaskResponse task = createTask(ana, h, recurring(TaskRecurrence.DAILY, LocalDate.of(9999, 12, 31), null,
                 null));
 
-        TaskResponse next = complete(ana, h, task.id());
+        ResponseEntity<String> r = raw(HttpMethod.POST, taskPath(h, task.id()) + "/complete", ana, null,
+                MediaType.APPLICATION_JSON);
 
-        assertThat(next.dueDate()).isEqualTo(LocalDate.of(10000, 1, 1));
-        assertThat(getTask(ana, h, task.id()).dueDate()).isEqualTo(LocalDate.of(10000, 1, 1));
+        assertProblem(r, HttpStatus.UNPROCESSABLE_ENTITY, "task-schedule-exhausted");
+        assertThat(getTask(ana, h, task.id()).dueDate()).isEqualTo(LocalDate.of(9999, 12, 31));
+        assertThat(getTask(ana, h, task.id()).lastCompletedAt()).isNull();
     }
 
     // --- Texto ---

@@ -51,6 +51,7 @@ public class TaskService {
     static final String ROTATION_MEMBER_NOT_MEMBER = "rotation-member-not-member";
     static final String ASSIGNEE_NOT_IN_ROTATION = "assignee-not-in-rotation";
     static final String CONFLICTING_FILTERS = "conflicting-filters";
+    static final String TASK_SCHEDULE_EXHAUSTED = "task-schedule-exhausted";
 
     private final TaskRepository tasks;
     private final TaskCompletionRepository completions;
@@ -150,12 +151,18 @@ public class TaskService {
         }
         Instant now = Instant.now(clock);
         LocalDate today = LocalDate.ofInstant(now, clock.getZone());
+        LocalDate nextDue = task.isRecurring()
+                ? RecurrenceSchedule.nextDueDate(task.getRecurrence(), task.getAnchorDate(), task.getDueDate(), today)
+                : null;
+        // La API solo admite fechas de los años 1..9999 (D-047): no puede devolver una que ella misma rechaza.
+        if (nextDue != null && nextDue.isAfter(Task.MAX_DUE_DATE)) {
+            throw new BusinessRuleException(TASK_SCHEDULE_EXHAUSTED,
+                    "La siguiente ocurrencia de la tarea cae después de " + Task.MAX_DUE_DATE + ".");
+        }
         completions.save(task.recordCompletion(userId, now));
-        if (!task.isRecurring()) {
+        if (nextDue == null) {
             task.markDone(now);
         } else {
-            LocalDate nextDue = RecurrenceSchedule.nextDueDate(task.getRecurrence(), task.getAnchorDate(),
-                    task.getDueDate(), today);
             task.advanceTo(nextDue, nextAssignee(householdId, task), now);
         }
         return TaskMapper.toResponse(task, today);
