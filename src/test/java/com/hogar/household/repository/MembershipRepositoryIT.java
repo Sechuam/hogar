@@ -11,6 +11,7 @@ import com.hogar.user.domain.User;
 import com.hogar.user.repository.UserRepository;
 import jakarta.persistence.EntityManager;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -103,6 +104,25 @@ class MembershipRepositoryIT extends AbstractIntegrationTest {
 
         assertThat(memberships.countActive(householdId)).isEqualTo(2);
         assertThat(memberships.countActiveOwners(householdId)).isEqualTo(1);
+    }
+
+    @Test
+    void countsActiveMembersOfSeveralHouseholdsInOneQuery() {
+        UUID other = households.saveAndFlush(Household.create("Casa playa", null, null, NOW)).getId();
+        UUID empty = households.saveAndFlush(Household.create("Vacío", null, null, NOW)).getId();
+        memberships.saveAndFlush(Membership.owner(householdId, ana, NOW));
+        memberships.saveAndFlush(Membership.member(householdId, carla, NOW));
+        Membership leaving = Membership.member(householdId, bob, NOW);
+        leaving.leave(NOW.plusSeconds(30));
+        memberships.saveAndFlush(leaving);
+        memberships.saveAndFlush(Membership.owner(other, bob, NOW));
+        Membership gone = Membership.owner(empty, carla, NOW);
+        gone.leave(NOW.plusSeconds(30));
+        memberships.saveAndFlush(gone);
+        em.clear();
+
+        assertThat(memberships.countActiveByHouseholdIds(List.of(householdId, other, empty)))
+                .containsExactlyInAnyOrder(new ActiveMemberCount(householdId, 2), new ActiveMemberCount(other, 1));
     }
 
     @Test

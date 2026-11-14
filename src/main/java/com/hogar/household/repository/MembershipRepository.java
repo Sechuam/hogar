@@ -2,6 +2,7 @@ package com.hogar.household.repository;
 
 import com.hogar.household.domain.Membership;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -36,6 +37,15 @@ public interface MembershipRepository extends JpaRepository<Membership, UUID> {
 
     @Query("select count(m) from Membership m where m.householdId = :householdId and m.leftAt is null")
     long countActive(UUID householdId);
+
+    /**
+     * Miembros activos de varios hogares en una sola consulta agregada. Los hogares sin miembros
+     * activos no aparecen en el resultado.
+     */
+    @Query("select new com.hogar.household.repository.ActiveMemberCount(m.householdId, count(m))"
+            + " from Membership m where m.householdId in :householdIds and m.leftAt is null"
+            + " group by m.householdId")
+    List<ActiveMemberCount> countActiveByHouseholdIds(Collection<UUID> householdIds);
 
     @Query("select count(m) from Membership m where m.householdId = :householdId and m.leftAt is null"
             + " and m.role = com.hogar.household.domain.HouseholdRole.OWNER")
