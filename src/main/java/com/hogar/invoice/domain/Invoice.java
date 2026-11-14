@@ -145,7 +145,9 @@ public class Invoice implements Persistable<UUID> {
         if (filename == null || filename.isBlank()) {
             throw new IllegalArgumentException("filename must not be blank");
         }
-        if (filename.length() > MAX_FILENAME_LENGTH) {
+        // Puntos de código, como cuenta PostgreSQL (varchar) y como recorta FilenameSanitizer: con
+        // length() (unidades UTF-16) un nombre saneado de más de 127 emojis acababa en un 500.
+        if (filename.codePointCount(0, filename.length()) > MAX_FILENAME_LENGTH) {
             throw new IllegalArgumentException("filename must have at most " + MAX_FILENAME_LENGTH + " characters");
         }
         if (FORBIDDEN_FILENAME_CHARS.matcher(filename).find()) {

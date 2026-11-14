@@ -84,6 +84,17 @@ class InvoiceRepositoryIT extends AbstractIntegrationTest {
         assertThat(invoices.existsByExpenseId(expenseId)).isTrue();
     }
 
+    /** {@code varchar(255)} cuenta caracteres (puntos de código), no unidades UTF-16 ni bytes. */
+    @Test
+    void filenameOf255EmojisFitsTheColumn() {
+        String name = "😀".repeat(Invoice.MAX_FILENAME_LENGTH);
+        Invoice created = invoices.saveAndFlush(Invoice.create(householdId, expense(householdId),
+                UUID.randomUUID().toString(), "application/pdf", 2048, SHA, name, ana, NOW));
+        em.clear();
+
+        assertThat(invoices.findById(created.getId()).orElseThrow().getFilename()).isEqualTo(name);
+    }
+
     @Test
     void findersIgnoreOtherExpensesAndHouseholds() {
         UUID expenseId = expense(householdId);
