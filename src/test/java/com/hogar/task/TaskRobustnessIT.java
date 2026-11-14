@@ -428,6 +428,37 @@ class TaskRobustnessIT extends TaskApiSupport {
         return tasksPath(householdId) + "/" + rawTaskId;
     }
 
+    // --- Paginación extrema ---
+
+    @Test
+    void hugePageNumbersAreBadRequestsNeverServerErrors() {
+        TestUser ana = users().create("Ana");
+        UUID h = household(ana);
+        TaskResponse task = createTask(ana, h, recurring(TaskRecurrence.DAILY, today(), null, null));
+        complete(ana, h, task.id());
+        String completions = taskPath(h, task.id()) + "/completions";
+        int maxPage = Integer.MAX_VALUE / 100;
+
+        // page·size > Integer.MAX_VALUE hacía fallar a Spring Data ("Page offset exceeds…") → 500.
+        for (String path : new String[] {
+                tasksPath(h) + "?page=2147483647&size=100",
+                tasksPath(h) + "?page=21474837&size=100",
+                tasksPath(h) + "?page=" + (maxPage + 1) + "&size=1",
+                tasksPath(h) + "?page=2147483648",
+                completions + "?page=2147483647&size=100",
+                completions + "?page=" + (maxPage + 1),
+                tasksPath(h) + "?size=" + Long.MAX_VALUE,
+                tasksPath(h) + "?overdue=maybe",
+                tasksPath(h) + "?mine=maybe"}) {
+            ResponseEntity<String> r = get(path, ana);
+            assertThat(r.getStatusCode()).as(path + " → " + r.getBody()).isEqualTo(HttpStatus.BAD_REQUEST);
+            assertClientError(r);
+        }
+        // La última página admitida es simplemente una página vacía.
+        assertThat(listTasks(ana, h, "?page=" + maxPage + "&size=100").content()).isEmpty();
+        assertThat(listCompletions(ana, h, task.id(), "?page=" + maxPage + "&size=100").content()).isEmpty();
+    }
+
     private LocalDate dbAnchor(UUID taskId) {
         return jdbc.queryForObject("select anchor_date from tasks where id = ?", LocalDate.class, taskId);
     }

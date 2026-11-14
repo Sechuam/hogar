@@ -29,6 +29,13 @@ import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 @RequestMapping("/api/households/{householdId}/tasks")
 class TaskController {
 
+    /**
+     * Página máxima: con {@code size} ≤ 100 el desplazamiento ({@code page·size}) cabe en un {@code int},
+     * que es lo que admite JPA ({@code setFirstResult}); más allá Spring Data lanza una excepción (500).
+     * Fuera de rango → 400, como {@code page < 0} (D-043).
+     */
+    static final int MAX_PAGE = Integer.MAX_VALUE / 100;
+
     private final TaskService tasks;
     private final CurrentUser currentUser;
 
@@ -47,7 +54,8 @@ class TaskController {
 
     /**
      * {@code mine=true} = asignadas a mí (incompatible con {@code assigneeId}); {@code overdue=true} =
-     * PENDING con {@code dueDate} anterior a hoy. {@code size} fuera de 1..100 o {@code page} negativa → 400.
+     * PENDING con {@code dueDate} anterior a hoy. {@code size} fuera de 1..100 o {@code page} fuera de
+     * 0..{@value #MAX_PAGE} → 400.
      */
     @GetMapping
     PageResponse<TaskResponse> list(@PathVariable UUID householdId,
@@ -55,7 +63,7 @@ class TaskController {
                                     @RequestParam(required = false) UUID assigneeId,
                                     @RequestParam(required = false) TaskStatus status,
                                     @RequestParam(required = false) Boolean overdue,
-                                    @RequestParam(defaultValue = "0") @Min(0) int page,
+                                    @RequestParam(defaultValue = "0") @Min(0) @Max(MAX_PAGE) int page,
                                     @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
         return tasks.list(householdId, currentUser.id(), mine, assigneeId, status, overdue, page, size);
     }
@@ -91,7 +99,7 @@ class TaskController {
 
     @GetMapping("/{taskId}/completions")
     PageResponse<TaskCompletionResponse> completions(@PathVariable UUID householdId, @PathVariable UUID taskId,
-                                                     @RequestParam(defaultValue = "0") @Min(0) int page,
+                                                     @RequestParam(defaultValue = "0") @Min(0) @Max(MAX_PAGE) int page,
                                                      @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
         return tasks.completions(householdId, currentUser.id(), taskId, page, size);
     }
