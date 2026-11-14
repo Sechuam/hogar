@@ -64,6 +64,23 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void serviceUnavailableIs503WithItsCode() throws Exception {
+        mvc.perform(get("/fake/unavailable"))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value("google-unavailable"));
+    }
+
+    /** Un {@code @PreAuthorize} o regla de Spring Security que se lance dentro del controller. */
+    @Test
+    void springAccessDeniedIs403ProblemWithoutInternals() throws Exception {
+        mvc.perform(get("/fake/access-denied"))
+                .andExpect(status().isForbidden())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.code").value("forbidden"))
+                .andExpect(jsonPath("$.detail").value("No tienes permisos para realizar esta acción."));
+    }
+
+    @Test
     void tooManyRequestsAddsRetryAfterHeader() throws Exception {
         mvc.perform(get("/fake/too-many"))
                 .andExpect(status().isTooManyRequests())
@@ -210,6 +227,16 @@ class GlobalExceptionHandlerTest {
         @GetMapping("/fake/integrity")
         void integrity() {
             throw new org.springframework.dao.DataIntegrityViolationException("duplicate key uk_users_email");
+        }
+
+        @GetMapping("/fake/unavailable")
+        void unavailable() {
+            throw new ServiceUnavailableException("google-unavailable", "Google no responde");
+        }
+
+        @GetMapping("/fake/access-denied")
+        void accessDenied() {
+            throw new org.springframework.security.access.AccessDeniedException("regla interna hasRole('X')");
         }
 
         @GetMapping("/fake/boom")
