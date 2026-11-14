@@ -106,6 +106,23 @@ class TaskRobustnessIT extends TaskApiSupport {
     }
 
     @Test
+    void unicodeSpacesOnlyTitleIsAClientErrorNotAServerError() {
+        TestUser ana = users().create("Ana");
+        UUID h = household(ana);
+        // U+2003 (em space) y compañía: @NotBlank (trim()) no los veía blancos, String.isBlank() de la entidad sí → 500.
+        for (String title : new String[] {"\"\\u2003\"", "\"\\u2003\\u3000\"", "\"\\u001c\""}) {
+            ResponseEntity<String> r = postJson(tasksPath(h), ana, taskJson(title, "\"NONE\"", "null"));
+            assertThat(r.getStatusCode()).as(title + " " + r.getBody()).isNotEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
+            assertValidationError(r, "title");
+        }
+        TaskResponse task = createTask(ana, h, oneOff("Fregar", null, null));
+        ResponseEntity<String> put = raw(HttpMethod.PUT, taskPath(h, task.id()), ana,
+                taskJson("\"\\u2003\"", "\"NONE\"", "null"), MediaType.APPLICATION_JSON);
+        assertValidationError(put, "title");
+        assertThat(getTask(ana, h, task.id()).title()).isEqualTo("Fregar");
+    }
+
+    @Test
     void textLimitsAreInclusiveAndBlankDescriptionIsNull() {
         TestUser ana = users().create("Ana");
         UUID h = household(ana);
