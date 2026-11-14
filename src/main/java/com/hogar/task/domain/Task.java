@@ -48,6 +48,15 @@ public class Task {
     static final int MIN_ROTATION_SIZE = 2;
     static final int MAX_ROTATION_SIZE = 20;
 
+    /**
+     * Rango admitido para la {@code dueDate} que fija quien crea o edita la tarea. Antes del año 1 el
+     * driver JDBC lee mal las fechas a.C. que PostgreSQL sí guarda (101 a.C. vuelve como el año 101 y el
+     * 29-feb del año 0 no se puede leer: la tarea daba 500 para siempre); por arriba, un año de 5+ cifras
+     * acaba fuera del rango de {@code DATE}. Las ocurrencias calculadas al completar pueden pasar de 9999.
+     */
+    public static final LocalDate MIN_DUE_DATE = LocalDate.of(1, 1, 1);
+    public static final LocalDate MAX_DUE_DATE = LocalDate.of(9999, 12, 31);
+
     @Id
     private UUID id;
 
@@ -243,6 +252,9 @@ public class Task {
         Objects.requireNonNull(recurrence, "recurrence");
         if (recurrence != TaskRecurrence.NONE && dueDateOrNull == null) {
             throw new IllegalArgumentException("recurring tasks need a due date");
+        }
+        if (dueDateOrNull != null && (dueDateOrNull.isBefore(MIN_DUE_DATE) || dueDateOrNull.isAfter(MAX_DUE_DATE))) {
+            throw new IllegalArgumentException("due date must be between " + MIN_DUE_DATE + " and " + MAX_DUE_DATE);
         }
         List<UUID> newRotation = requireRotation(rotationOrEmpty, recurrence);
         UUID newAssignee = assigneeIdOrNull;

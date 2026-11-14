@@ -111,6 +111,25 @@ class TaskTest {
     }
 
     @Test
+    void dueDateMustBeWithinYears1To9999WhenSetButOccurrencesMayGoBeyond() {
+        assertInvalid(() -> create("Baño", TaskRecurrence.NONE, LocalDate.of(0, 2, 29), List.of()));
+        assertInvalid(() -> create("Baño", TaskRecurrence.DAILY, Task.MIN_DUE_DATE.minusDays(1), List.of()));
+        assertInvalid(() -> create("Baño", TaskRecurrence.DAILY, Task.MAX_DUE_DATE.plusDays(1), List.of()));
+        Task edge = create("Baño", TaskRecurrence.DAILY, Task.MAX_DUE_DATE, List.of());
+        assertInvalid(() -> edge.update("Baño", null, null, TaskRecurrence.DAILY, LocalDate.of(-100, 3, 31),
+                List.of(), LATER));
+        assertThat(create("Baño", TaskRecurrence.DAILY, Task.MIN_DUE_DATE, List.of()).getDueDate())
+                .isEqualTo(Task.MIN_DUE_DATE);
+
+        // Completar el 31-dic-9999 avanza a 10000: la cota solo aplica a lo que fija el usuario.
+        edge.advanceTo(Task.MAX_DUE_DATE.plusDays(1), null, LATER);
+        assertThat(edge.getDueDate()).isEqualTo(LocalDate.of(10000, 1, 1));
+        // Limitación aceptada: a partir de ahí un PUT debe traer una fecha dentro del rango.
+        assertInvalid(() -> edge.update("Otro", null, null, TaskRecurrence.DAILY, edge.getDueDate(), List.of(),
+                LATER));
+    }
+
+    @Test
     void acceptsTheMaximumRotationAndTitleLength() {
         List<UUID> twenty = IntStream.range(0, 20).mapToObj(i -> UUID.randomUUID()).toList();
 
