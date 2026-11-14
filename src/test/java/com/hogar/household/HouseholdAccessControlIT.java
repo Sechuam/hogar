@@ -7,6 +7,7 @@ import com.hogar.household.dto.HouseholdResponse;
 import com.hogar.household.dto.InvitationResponse;
 import com.hogar.household.dto.MemberResponse;
 import com.hogar.support.TestUsers.TestUser;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -15,10 +16,15 @@ import java.util.stream.Stream;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
 
 /**
  * Matriz de control de acceso de todos los endpoints bajo {@code /api/households/{id}/**}.
@@ -46,14 +52,19 @@ class HouseholdAccessControlIT extends HouseholdApiSupport {
     }
 
     /**
-     * Ingresos y gastos: el guard de membresía va antes de buscar el recurso, así que basta un ID
-     * cualquiera (el aislamiento de recursos concretos se prueba en {@code IncomeIT}/{@code ExpenseIT}).
+     * Ingresos, gastos y facturas: el guard de membresía va antes de buscar el recurso, así que basta
+     * un ID cualquiera (el aislamiento de recursos concretos se prueba en {@code IncomeIT},
+     * {@code ExpenseIT} e {@code InvoiceIT}).
      * Los cuerpos son válidos para que la validación (400) no tape el 404.
      */
     static final UUID ANY_ID = UUID.randomUUID();
     static final Map<String, Object> INCOME_BODY = Map.of("amount", "10.00", "concept", "x", "date", "2026-03-01");
     static final Map<String, Object> EXPENSE_BODY =
             Map.of("amount", "10.00", "description", "x", "category", "RENT", "date", "2026-03-01");
+
+    /** Factura: multipart con un PDF válido, para que nada antes del guard responda otra cosa. */
+    static final String INVOICE_PATH = "/api/households/{h}/expenses/" + ANY_ID + "/invoice";
+    static final MultiValueMap<String, Object> INVOICE_BODY = invoiceBody();
 
     static final List<Endpoint> ENDPOINTS = List.of(
             new Endpoint(HttpMethod.GET, "/api/households/{h}", null, false),
@@ -75,7 +86,31 @@ class HouseholdAccessControlIT extends HouseholdApiSupport {
             new Endpoint(HttpMethod.GET, "/api/households/{h}/expenses", null, false),
             new Endpoint(HttpMethod.GET, "/api/households/{h}/expenses/" + ANY_ID, null, false),
             new Endpoint(HttpMethod.PUT, "/api/households/{h}/expenses/" + ANY_ID, EXPENSE_BODY, false),
-            new Endpoint(HttpMethod.DELETE, "/api/households/{h}/expenses/" + ANY_ID, null, false));
+            new Endpoint(HttpMethod.DELETE, "/api/households/{h}/expenses/" + ANY_ID, null, false),
+            new Endpoint(HttpMethod.POST, INVOICE_PATH, INVOICE_BODY, false),
+            new Endpoint(HttpMethod.GET, INVOICE_PATH, null, false),
+            new Endpoint(HttpMethod.GET, INVOICE_PATH + "/metadata", null, false),
+            new Endpoint(HttpMethod.DELETE, INVOICE_PATH, null, false));
+
+    private static MultiValueMap<String, Object> invoiceBody() {
+        HttpHeaders part = new HttpHeaders();
+        part.setContentType(MediaType.APPLICATION_PDF);
+        part.setContentDisposition(ContentDisposition.formData().name("file").filename("f.pdf").build());
+        MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
+        body.add("file", new HttpEntity<>("%PDF-1.4\n%%EOF\n".getBytes(StandardCharsets.US_ASCII), part));
+        return body;
+    }
+
+    /** Como el de la base, pero un cuerpo multipart viaja como {@code multipart/form-data}. */
+    @Override
+    protected ResponseEntity<String> call(HttpMethod method, String path, TestUser user, Object body) {
+        if (!(body instanceof MultiValueMap<?, ?>)) {
+            return super.call(method, path, user, body);
+        }
+        HttpHeaders headers = user != null ? user.bearer() : new HttpHeaders();
+        headers.setContentType(MediaType.MULTIPART_FORM_DATA);
+        return rest.exchange(path, method, new HttpEntity<>(body, headers), String.class);
+    }
 
     static Stream<Endpoint> allEndpoints() {
         return ENDPOINTS.stream();
