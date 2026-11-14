@@ -77,7 +77,7 @@ class ExpenseServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new ExpenseService(expenses, guard, households, incomes, Clock.fixed(NOW, ZoneOffset.UTC));
+        service = new ExpenseService(expenses, guard, households, incomes, event -> { }, Clock.fixed(NOW, ZoneOffset.UTC));
         lenient().when(expenses.save(any(SharedExpense.class))).thenAnswer(inv -> inv.getArgument(0));
     }
 

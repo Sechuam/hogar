@@ -69,6 +69,13 @@ hogar:
   invitations:
     default-ttl: 7d
     max-ttl: 30d
+  invoices:
+    # Límite de la aplicación; el de multipart (arriba) es la primera barrera.
+    max-size: 10MB
+  storage:
+    local:
+      # Directorio de las facturas en disco (en Docker, el volumen 'invoices').
+      base-dir: ${STORAGE_DIR:./storage}
 
 springdoc:
   swagger-ui:

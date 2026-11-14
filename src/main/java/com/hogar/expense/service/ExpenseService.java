@@ -5,17 +5,16 @@ import com.hogar.expense.domain.SharedExpense;
 import com.hogar.expense.domain.split.SplitCalculator;
 import com.hogar.expense.domain.split.SplitParticipant;
 import com.hogar.expense.domain.split.SplitResult;
+import com.hogar.expense.dto.ExpenseDeletedEvent;
 import com.hogar.expense.dto.ExpenseRequest;
 import com.hogar.expense.dto.ExpenseResponse;
 import com.hogar.expense.repository.SharedExpenseRepository;
-import com.hogar.household.domain.HouseholdRole;
 import com.hogar.household.domain.SplitPolicy;
 import com.hogar.household.dto.HouseholdSplitInfo;
 import com.hogar.household.service.HouseholdQueries;
 import com.hogar.income.service.IncomeQueries;
 import com.hogar.shared.error.BadRequestException;
 import com.hogar.shared.error.BusinessRuleException;
-import com.hogar.shared.error.ForbiddenException;
 import com.hogar.shared.error.NotFoundException;
 import com.hogar.shared.security.MembershipGuard;
 import com.hogar.shared.web.PageResponse;
@@ -27,6 +26,7 @@ import java.time.YearMonth;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,7 +40,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class ExpenseService {
 
     static final String EXPENSE_NOT_FOUND = "expense-not-found";
-    static final String EXPENSE_EDIT_FORBIDDEN = "expense-edit-forbidden";
+    static final String EXPENSE_EDIT_FORBIDDEN = ExpensePermissions.EXPENSE_EDIT_FORBIDDEN;
     static final String PAYER_NOT_MEMBER = "payer-not-member";
     static final String INVALID_DATE_RANGE = "invalid-date-range";
 
@@ -48,14 +48,16 @@ public class ExpenseService {
     private final MembershipGuard guard;
     private final HouseholdQueries households;
     private final IncomeQueries incomes;
+    private final ApplicationEventPublisher events;
     private final Clock clock;
 
     ExpenseService(SharedExpenseRepository expenses, MembershipGuard guard, HouseholdQueries households,
-                   IncomeQueries incomes, Clock clock) {
+                   IncomeQueries incomes, ApplicationEventPublisher events, Clock clock) {
         this.expenses = expenses;
         this.guard = guard;
         this.households = households;
         this.incomes = incomes;
+        this.events = events;
         this.clock = clock;
     }
 
@@ -126,12 +128,16 @@ public class ExpenseService {
         return ExpenseMapper.toResponse(expense);
     }
 
-    /** Solo pagador, creador u OWNER. Las partes se borran en cascada. */
+    /**
+     * Solo pagador, creador u OWNER. Las partes se borran en cascada; lo que cuelga del gasto en
+     * otras features se entera por {@link ExpenseDeletedEvent} (síncrono, antes del borrado).
+     */
     @Transactional
     public void delete(UUID householdId, UUID userId, UUID expenseId) {
         guard.requireMember(householdId, userId);
         SharedExpense expense = loadForUpdate(householdId, expenseId);
         requireCanModify(expense, households.getSplitInfo(householdId), userId);
+        events.publishEvent(new ExpenseDeletedEvent(householdId, expenseId));
         expenses.delete(expense);
     }
 
@@ -157,12 +163,7 @@ public class ExpenseService {
     }
 
     private static void requireCanModify(SharedExpense expense, HouseholdSplitInfo info, UUID userId) {
-        boolean isOwner = info.activeMembers().stream()
-                .anyMatch(m -> m.userId().equals(userId) && m.role() == HouseholdRole.OWNER);
-        if (!isOwner && !userId.equals(expense.getPaidBy()) && !userId.equals(expense.getCreatedBy())) {
-            throw new ForbiddenException(EXPENSE_EDIT_FORBIDDEN,
-                    "Solo quien pagó o registró el gasto, o un OWNER, puede modificarlo.");
-        }
+        ExpensePermissions.requireCanModify(expense, info, userId);
     }
 
     /** Bloquea la fila del gasto: dos escrituras concurrentes se serializan en vez de interbloquearse (D-044). */

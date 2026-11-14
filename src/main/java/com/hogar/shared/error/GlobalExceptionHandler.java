@@ -24,6 +24,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
 /**
@@ -135,6 +136,15 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
             return ResponseEntity.badRequest().body(problem);
         }
         return super.handleHttpMessageNotReadable(ex, headers, status, request);
+    }
+
+    /** Fichero por encima del límite de multipart ({@code spring.servlet.multipart.max-file-size}). */
+    @Override
+    protected ResponseEntity<Object> handleMaxUploadSizeExceededException(
+            MaxUploadSizeExceededException ex, HttpHeaders headers, HttpStatusCode status, WebRequest request) {
+        ProblemDetail problem = Problems.of(HttpStatus.PAYLOAD_TOO_LARGE, "file-too-large", "Payload Too Large",
+                "El fichero supera el tamaño máximo permitido.");
+        return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(problem);
     }
 
     private static String fieldPath(List<JsonMappingException.Reference> path) {
