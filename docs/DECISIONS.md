@@ -326,3 +326,44 @@ Spring Data JPA 3.5 no admite `Sort.nullsLast()` con consultas criteria. El list
 versión/`If-Match` (un PUT con datos viejos tras un `complete` re-ancla en la fecha antigua; mismo
 diseño que gastos); PUT con `assigneeId` nulo en una tarea con rotación reinicia el turno a
 `rotation[0]`; una baja de miembro simultánea a asignarle una tarea no está serializada.
+
+## D-053 · Tipo de factura solo por magic bytes — Aceptada (Fase 4)
+El `Content-Type` y la extensión los controla el cliente. Se leen los primeros bytes y solo se
+admiten PDF (`%PDF-`), JPEG, PNG y WebP (`RIFF…WEBP`); cualquier otra cosa → 415
+`unsupported-file-type` sin dejar nada en disco. El tipo guardado y servido es el detectado. La
+descarga sale siempre como `attachment` con `X-Content-Type-Options: nosniff` y
+`Cache-Control: private, no-store`: un polyglot PDF+HTML nunca se interpreta como HTML.
+
+## D-054 · Almacenamiento direccionado por UUID tras una interfaz — Aceptada (Fase 4)
+`StorageService` (`store`/`open`/`delete`) con `LocalFileSystemStorage` ahora y S3 posible sin tocar
+servicios. La clave es un UUID canónico generado por la app (nada del cliente llega a la ruta); se
+comprueba además que la ruta normalizada sigue dentro del directorio base. Escritura a temporal +
+`ATOMIC_MOVE`. El nombre original solo se guarda saneado para `Content-Disposition` (RFC 6266,
+`filename` + `filename*`), contado en puntos de código como `varchar(255)`.
+
+## D-055 · Consistencia BD ↔ disco: antes un huérfano que una fila sin fichero — Aceptada (Fase 4)
+**Decisión:** subir = escribir fichero → insertar fila; el fichero solo se borra si la transacción
+hace **rollback** (no ante un resultado desconocido, porque la fila podría existir). Borrar factura o
+gasto = borrar fila → borrar fichero en `afterCommit` (el gasto avisa con `ExpenseDeletedEvent`
+síncrono, sin depender de facturas). Subir/borrar factura bloquea la fila del gasto
+(`ExpenseQueries.lockForModification`), así se serializa con la edición y el borrado del gasto.
+**Consecuencias:** un fallo al borrar un fichero tras el commit deja un huérfano (se registra en el
+log); la limpieza periódica queda como deuda.
+
+## D-056 · Factura y gasto del mismo hogar, garantizado por BD — Aceptada (Fase 4)
+FK compuesta `invoices(expense_id, household_id) → shared_expenses(id, household_id)` (V10 añade
+`UNIQUE(id, household_id)` en `shared_expenses` sin editar V8). Una factura no puede quedar
+asociada a un hogar distinto del de su gasto ni por un bug del servicio.
+
+## D-057 · Errores de multipart como ProblemDetail — Aceptada (Fase 4)
+Multipart mal formado (cuerpo truncado, sin boundary, cabecera ilegible) → 400
+`malformed-multipart` (antes 500 con traza ERROR por petición: un usuario podía llenar el log).
+Exceso de tamaño → 413 `file-too-large`. `server.tomcat.max-part-header-size: 4KB`: con 512 B, un
+nombre no ASCII largo daba un falso 413. La descarga lee los metadatos en una transacción de solo
+lectura que se cierra antes de enviar el fichero (no retiene conexión a BD).
+
+**Deuda conocida (Fase 4):** sin cuota de disco por hogar/usuario; el SHA-256 no se vuelve a
+comprobar al descargar; sin limpieza periódica de huérfanos; la subida retiene la conexión y el
+bloqueo del gasto mientras escribe (con S3 cruzaría la red: subir primero y enlazar después); un
+borrado de gastos que no pase por `ExpenseService` (cascada futura de hogar/usuario) no publicaría
+el evento.

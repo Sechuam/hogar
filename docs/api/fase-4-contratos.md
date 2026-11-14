@@ -51,8 +51,9 @@ Base: `/api/households/{householdId}/expenses/{expenseId}/invoice`, autenticados
 ## 4. Consistencia BD ↔ disco
 
 - **Subida:** se escribe el fichero con clave nueva y después se inserta la fila. Se registra una
-  `TransactionSynchronization`: si la transacción no hace commit (`afterCompletion` ≠ COMMITTED), se
-  borra el fichero. Nunca queda una fila sin fichero.
+  `TransactionSynchronization`: si la transacción hace **rollback** (`STATUS_ROLLED_BACK`), se borra el
+  fichero; ante un resultado desconocido se conserva (la fila podría existir). Nunca queda una fila sin
+  fichero (D-055).
 - **Borrado de factura:** se borra la fila; el fichero se borra en `afterCommit` (un fallo ahí solo se
   registra en el log: queda un huérfano, nunca una fila sin fichero).
 - **Borrado del gasto:** un `@EventListener` de `ExpenseDeletedEvent` (síncrono, dentro de la
@@ -60,3 +61,11 @@ Base: `/api/households/{householdId}/expenses/{expenseId}/invoice`, autenticados
   desaparece por `ON DELETE CASCADE`.
 - Subida/borrado de factura y edición/borrado del gasto se serializan con el bloqueo de la fila del gasto.
 - La limpieza periódica de huérfanos queda fuera de alcance (deuda anotada).
+
+## 5. Aclaraciones tras QA
+
+- Multipart mal formado → 400 `malformed-multipart`; cuerpo no multipart → 415 `unsupported-media-type`;
+  parte `file` repetida → se usa la primera; parte sin `filename` → 400 (D-057).
+- `Location` del POST = la URL de la factura, sin query string.
+- Fichero desaparecido del disco al descargar (borrado concurrente ya confirmado) → 404 `invoice-not-found`.
+- Cualquier `Accept` en la descarga recibe el fichero (el `Content-Type` lo fija el servidor).
