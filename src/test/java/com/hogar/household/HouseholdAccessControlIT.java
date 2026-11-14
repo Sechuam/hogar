@@ -46,7 +46,7 @@ class HouseholdAccessControlIT extends HouseholdApiSupport {
     }
 
     /**
-     * Ingresos y gastos: el guard de membresía va antes de buscar el recurso, así que basta un ID
+     * Ingresos, gastos y tareas: el guard de membresía va antes de buscar el recurso, así que basta un ID
      * cualquiera (el aislamiento de recursos concretos se prueba en {@code IncomeIT}/{@code ExpenseIT}).
      * Los cuerpos son válidos para que la validación (400) no tape el 404.
      */
@@ -54,6 +54,7 @@ class HouseholdAccessControlIT extends HouseholdApiSupport {
     static final Map<String, Object> INCOME_BODY = Map.of("amount", "10.00", "concept", "x", "date", "2026-03-01");
     static final Map<String, Object> EXPENSE_BODY =
             Map.of("amount", "10.00", "description", "x", "category", "RENT", "date", "2026-03-01");
+    static final Map<String, Object> TASK_BODY = Map.of("title", "x", "recurrence", "NONE");
 
     static final List<Endpoint> ENDPOINTS = List.of(
             new Endpoint(HttpMethod.GET, "/api/households/{h}", null, false),
@@ -75,7 +76,15 @@ class HouseholdAccessControlIT extends HouseholdApiSupport {
             new Endpoint(HttpMethod.GET, "/api/households/{h}/expenses", null, false),
             new Endpoint(HttpMethod.GET, "/api/households/{h}/expenses/" + ANY_ID, null, false),
             new Endpoint(HttpMethod.PUT, "/api/households/{h}/expenses/" + ANY_ID, EXPENSE_BODY, false),
-            new Endpoint(HttpMethod.DELETE, "/api/households/{h}/expenses/" + ANY_ID, null, false));
+            new Endpoint(HttpMethod.DELETE, "/api/households/{h}/expenses/" + ANY_ID, null, false),
+            new Endpoint(HttpMethod.POST, "/api/households/{h}/tasks", TASK_BODY, false),
+            new Endpoint(HttpMethod.GET, "/api/households/{h}/tasks", null, false),
+            new Endpoint(HttpMethod.GET, "/api/households/{h}/tasks/" + ANY_ID, null, false),
+            new Endpoint(HttpMethod.PUT, "/api/households/{h}/tasks/" + ANY_ID, TASK_BODY, false),
+            new Endpoint(HttpMethod.DELETE, "/api/households/{h}/tasks/" + ANY_ID, null, false),
+            new Endpoint(HttpMethod.POST, "/api/households/{h}/tasks/" + ANY_ID + "/complete", null, false),
+            new Endpoint(HttpMethod.POST, "/api/households/{h}/tasks/" + ANY_ID + "/reopen", null, false),
+            new Endpoint(HttpMethod.GET, "/api/households/{h}/tasks/" + ANY_ID + "/completions", null, false));
 
     static Stream<Endpoint> allEndpoints() {
         return ENDPOINTS.stream();

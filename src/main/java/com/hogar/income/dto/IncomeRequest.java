@@ -1,10 +1,10 @@
 package com.hogar.income.dto;
 
+import com.hogar.shared.validation.HasText;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
@@ -19,7 +19,7 @@ import java.time.LocalDate;
  */
 public record IncomeRequest(
         @NotNull @DecimalMin("0.01") @DecimalMax("999999999.99") @Digits(integer = 9, fraction = 2) BigDecimal amount,
-        @NotBlank @Size(max = 200) String concept,
+        @NotNull @HasText @Size(max = 200) String concept,
         @NotNull LocalDate date,
         boolean recurring,
         LocalDate endDate) {

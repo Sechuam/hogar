@@ -94,7 +94,7 @@ ingresos y miembros, concurrencia sin deadlocks, sin N+1). Cobertura ≥ 98 % en
 
 ---
 
-## Fase 3 — Tareas de casa ⬜
+## Fase 3 — Tareas de casa ✅
 **Rama:** `fase-3-tareas` · **Puede ir en paralelo con la Fase 4** (no comparten ficheros).
 
 - `tasks`: título, descripción, asignado, `recurrence` (NONE/DAILY/WEEKLY/MONTHLY),
@@ -103,6 +103,12 @@ ingresos y miembros, concurrencia sin deadlocks, sin N+1). Cobertura ≥ 98 % en
 - Completar una tarea recurrente registra la compleción, avanza `dueDate` según periodicidad
   y, si hay rotación, asigna al siguiente miembro activo (salta miembros que ya no están).
 - Filtros: mías, pendientes, vencidas. IT de rotación con 3 miembros y miembro que abandona.
+
+**Resultado:** 381 tests unitarios + 443 IT en verde (periodicidad con 20 000 casos aleatorios por
+tipo, rotación con abandono y expulsión, compleciones concurrentes 200 + 409, sin N+1 en listados).
+QA encontró y se corrigieron fechas a.C. que corrompían datos, títulos de espacios Unicode y páginas
+enormes → 500, también en gastos e ingresos. Decisiones D-047 a D-052; contrato en
+`docs/api/fase-3-contratos.md`.
 
 ---
 
