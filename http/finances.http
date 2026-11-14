@@ -1,0 +1,255 @@
+### Hogar API - 3/6 Ingresos, gastos y reparto
+# Requiere auth.http y households.http. El hogar empieza en PROPORTIONAL.
+# Importes como número JSON con 2 decimales como máximo; la respuesta siempre con escala 2.
+
+### Ingreso mensual recurrente de Ana (2400 €) -> 201
+POST {{baseUrl}}/api/households/{{householdId}}/incomes
+Authorization: Bearer {{anaToken}}
+Content-Type: application/json
+
+{
+  "amount": 2400.00,
+  "concept": "Nómina",
+  "date": "2026-01-01",
+  "recurring": true
+}
+
+> {%
+    client.test("ingreso 201", () => client.assert(response.status === 201, "status " + response.status));
+    client.global.set("anaIncomeId", response.body.id);
+%}
+
+### Ingreso mensual recurrente de Luis (1600 €) -> 201. Marta no registra ingresos.
+POST {{baseUrl}}/api/households/{{householdId}}/incomes
+Authorization: Bearer {{luisToken}}
+Content-Type: application/json
+
+{
+  "amount": 1600.00,
+  "concept": "Nómina",
+  "date": "2026-01-01",
+  "recurring": true,
+  "endDate": "2026-12-31"
+}
+
+> {%
+    client.test("ingreso 201", () => client.assert(response.status === 201, "status " + response.status));
+%}
+
+### Resumen del mes: 60 % / 40 % / 0 % (porcentajes que suman 100 por mayor resto) -> 200
+GET {{baseUrl}}/api/households/{{householdId}}/incomes/summary?month=2026-03
+Authorization: Bearer {{martaToken}}
+
+> {%
+    client.test("resumen 200", () => client.assert(response.status === 200, "status " + response.status));
+%}
+
+### Luis intenta borrar el ingreso de Ana -> 403 income-owner-required
+DELETE {{baseUrl}}/api/households/{{householdId}}/incomes/{{anaIncomeId}}
+Authorization: Bearer {{luisToken}}
+
+> {%
+    client.test("403", () => client.assert(response.status === 403, "status " + response.status));
+%}
+
+### Alquiler pagado por Ana: PROPORTIONAL -> 540,00 / 360,00 / 0,00 (Marta ingresa 0, D-009) -> 201
+POST {{baseUrl}}/api/households/{{householdId}}/expenses
+Authorization: Bearer {{anaToken}}
+Content-Type: application/json
+
+{
+  "amount": 900.00,
+  "description": "Alquiler de marzo",
+  "category": "RENT",
+  "date": "2026-03-01"
+}
+
+> {%
+    client.test("gasto 201", () => {
+        client.assert(response.status === 201, "status " + response.status);
+        client.assert(response.body.splitPolicyApplied === "PROPORTIONAL", "política");
+        const marta = response.body.shares.find(s => s.userId === client.global.get("martaId"));
+        client.assert(marta.amount === 0, "Marta paga " + marta.amount);
+    });
+    client.global.set("rentExpenseId", response.body.id);
+%}
+
+### Compra pagada por Luis: 84,37 -> 50,62 / 33,75 / 0,00 (el céntimo sobrante va al mayor resto) -> 201
+POST {{baseUrl}}/api/households/{{householdId}}/expenses
+Authorization: Bearer {{luisToken}}
+Content-Type: application/json
+
+{
+  "amount": 84.37,
+  "description": "Compra semanal",
+  "category": "GROCERIES",
+  "date": "2026-03-15"
+}
+
+> {%
+    client.test("gasto 201", () => {
+        client.assert(response.status === 201, "status " + response.status);
+        const total = response.body.shares.reduce((acc, s) => acc + Math.round(s.amount * 100), 0);
+        client.assert(total === 8437, "suma de partes " + total);
+    });
+    client.global.set("groceriesExpenseId", response.body.id);
+%}
+
+### Cena de diciembre: nadie tenía ingresos ese mes -> reparte a partes iguales con warning -> 201
+POST {{baseUrl}}/api/households/{{householdId}}/expenses
+Authorization: Bearer {{anaToken}}
+Content-Type: application/json
+
+{
+  "amount": 45.00,
+  "description": "Cena de Navidad",
+  "category": "OTHER",
+  "date": "2025-12-20"
+}
+
+> {%
+    client.test("fallback a EQUAL", () => {
+        client.assert(response.status === 201, "status " + response.status);
+        client.assert(response.body.splitPolicyApplied === "EQUAL", "política");
+        client.assert(response.body.warnings.includes("PROPORTIONAL_FALLBACK_NO_INCOME"), "warning");
+    });
+%}
+
+### Ana cambia la política del hogar a EQUAL -> 200 (no reescribe los gastos anteriores)
+PATCH {{baseUrl}}/api/households/{{householdId}}
+Authorization: Bearer {{anaToken}}
+Content-Type: application/json
+
+{
+  "splitPolicy": "EQUAL"
+}
+
+> {%
+    client.test("PATCH 200", () => client.assert(response.status === 200, "status " + response.status));
+%}
+
+### Internet pagado por Marta: EQUAL -> 10,00 cada uno -> 201
+POST {{baseUrl}}/api/households/{{householdId}}/expenses
+Authorization: Bearer {{martaToken}}
+Content-Type: application/json
+
+{
+  "amount": 30.00,
+  "description": "Fibra de marzo",
+  "category": "INTERNET",
+  "date": "2026-03-20"
+}
+
+> {%
+    client.test("gasto 201", () => client.assert(response.status === 201, "status " + response.status));
+%}
+
+### El alquiler conserva su reparto proporcional (snapshot) -> 200
+GET {{baseUrl}}/api/households/{{householdId}}/expenses/{{rentExpenseId}}
+Authorization: Bearer {{martaToken}}
+
+> {%
+    client.test("snapshot", () => {
+        client.assert(response.status === 200, "status " + response.status);
+        client.assert(response.body.splitPolicyApplied === "PROPORTIONAL", "política");
+    });
+%}
+
+### Gastos de marzo (alquiler, compra e internet), paginados (size máx. 100) -> 200
+GET {{baseUrl}}/api/households/{{householdId}}/expenses?from=2026-03-01&to=2026-03-31&page=0&size=20
+Authorization: Bearer {{anaToken}}
+
+> {%
+    client.test("listado 200", () => {
+        client.assert(response.status === 200, "status " + response.status);
+        client.assert(response.body.totalElements === 3, "gastos " + response.body.totalElements);
+    });
+%}
+
+### Luis corrige la descripción de su compra: no cambia importe ni fecha, no se recalcula -> 200
+PUT {{baseUrl}}/api/households/{{householdId}}/expenses/{{groceriesExpenseId}}
+Authorization: Bearer {{luisToken}}
+Content-Type: application/json
+
+{
+  "amount": 84.37,
+  "description": "Compra semanal (Mercadona)",
+  "category": "GROCERIES",
+  "date": "2026-03-15"
+}
+
+> {%
+    client.test("PUT 200", () => {
+        client.assert(response.status === 200, "status " + response.status);
+        client.assert(response.body.splitPolicyApplied === "PROPORTIONAL", "reparto conservado");
+    });
+%}
+
+### Marta no pagó ni creó el alquiler y no es OWNER -> 403 expense-edit-forbidden
+DELETE {{baseUrl}}/api/households/{{householdId}}/expenses/{{rentExpenseId}}
+Authorization: Bearer {{martaToken}}
+
+> {%
+    const body = typeof response.body === "string" ? JSON.parse(response.body) : response.body;
+    client.test("403 expense-edit-forbidden", () => {
+        client.assert(response.status === 403, "status " + response.status);
+        client.assert(body.code === "expense-edit-forbidden", "code " + body.code);
+    });
+%}
+
+### Validación: 3 decimales y descripción en blanco -> 400 validation-error con un error por campo
+POST {{baseUrl}}/api/households/{{householdId}}/expenses
+Authorization: Bearer {{anaToken}}
+Content-Type: application/json
+
+{
+  "amount": 12.345,
+  "description": "   ",
+  "category": "OTHER",
+  "date": "2026-03-10"
+}
+
+> {%
+    const body = typeof response.body === "string" ? JSON.parse(response.body) : response.body;
+    client.test("400 validation-error", () => {
+        client.assert(response.status === 400, "status " + response.status);
+        client.assert(body.code === "validation-error", "code " + body.code);
+        client.assert(body.errors.length === 2, "errors " + JSON.stringify(body.errors));
+    });
+%}
+
+### Un tipo incorrecto (enum desconocido) también es validation-error del campo (D-029) -> 400
+POST {{baseUrl}}/api/households/{{householdId}}/expenses
+Authorization: Bearer {{anaToken}}
+Content-Type: application/json
+
+{
+  "amount": 10.00,
+  "description": "Categoría inventada",
+  "category": "CASINO",
+  "date": "2026-03-10"
+}
+
+> {%
+    const body = typeof response.body === "string" ? JSON.parse(response.body) : response.body;
+    client.test("400 validation-error en category", () => {
+        client.assert(response.status === 400, "status " + response.status);
+        client.assert(body.errors[0].field === "category", "campo " + body.errors[0].field);
+    });
+%}
+
+### Fecha fuera de 0001..9999 -> 400 validation-error del campo date (D-047)
+POST {{baseUrl}}/api/households/{{householdId}}/expenses
+Authorization: Bearer {{anaToken}}
+Content-Type: application/json
+
+{
+  "amount": 10.00,
+  "description": "Gasto del año 10000",
+  "category": "OTHER",
+  "date": "10000-01-01"
+}
+
+> {%
+    client.test("400", () => client.assert(response.status === 400, "status " + response.status));
+%}

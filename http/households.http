@@ -1,0 +1,168 @@
+### Hogar API - 2/6 Hogares, invitaciones y miembros
+# Requiere haber lanzado auth.http (anaToken, luisToken, martaToken, *Id).
+
+### Ana crea un hogar con reparto proporcional a ingresos -> 201 + Location (Ana = OWNER)
+POST {{baseUrl}}/api/households
+Authorization: Bearer {{anaToken}}
+Content-Type: application/json
+
+{
+  "name": "Piso de la calle Mayor",
+  "splitPolicy": "PROPORTIONAL",
+  "currency": "EUR"
+}
+
+> {%
+    client.test("hogar 201", () => {
+        client.assert(response.status === 201, "status " + response.status);
+        client.assert(response.body.myRole === "OWNER", "rol " + response.body.myRole);
+        client.assert(response.headers.valueOf("Location").endsWith(response.body.id), "Location");
+    });
+    client.global.set("householdId", response.body.id);
+%}
+
+### Mis hogares -> 200
+GET {{baseUrl}}/api/households
+Authorization: Bearer {{anaToken}}
+
+> {%
+    client.test("listado 200", () => client.assert(response.status === 200, "status " + response.status));
+%}
+
+### Renombrar el hogar (solo OWNER) -> 200
+PATCH {{baseUrl}}/api/households/{{householdId}}
+Authorization: Bearer {{anaToken}}
+Content-Type: application/json
+
+{
+  "name": "Piso compartido"
+}
+
+> {%
+    client.test("PATCH 200", () => client.assert(response.status === 200, "status " + response.status));
+%}
+
+### Marta aún no es miembro: el hogar "no existe" para ella -> 404 household-not-found (D-005)
+GET {{baseUrl}}/api/households/{{householdId}}
+Authorization: Bearer {{martaToken}}
+
+> {%
+    const body = typeof response.body === "string" ? JSON.parse(response.body) : response.body;
+    client.test("404 y no 403", () => {
+        client.assert(response.status === 404, "status " + response.status);
+        client.assert(body.code === "household-not-found", "code " + body.code);
+    });
+%}
+
+### Ana crea una invitación de 2 usos que caduca en 48 h -> 201
+POST {{baseUrl}}/api/households/{{householdId}}/invitations
+Authorization: Bearer {{anaToken}}
+Content-Type: application/json
+
+{
+  "ttlHours": 48,
+  "maxUses": 2
+}
+
+> {%
+    client.test("invitación 201", () => client.assert(response.status === 201, "status " + response.status));
+    client.global.set("invitationId", response.body.id);
+    client.global.set("invitationCode", response.body.code);
+    client.global.set("invitationLocation", response.headers.valueOf("Location"));
+%}
+
+### El Location del alta es consultable -> 200
+GET {{invitationLocation}}
+Authorization: Bearer {{anaToken}}
+
+> {%
+    client.test("invitación 200", () => client.assert(response.status === 200, "status " + response.status));
+%}
+
+### Invitaciones del hogar (vigentes hasta 100 + las 20 inactivas más recientes) -> 200
+GET {{baseUrl}}/api/households/{{householdId}}/invitations
+Authorization: Bearer {{anaToken}}
+
+> {%
+    client.test("listado 200", () => client.assert(response.status === 200, "status " + response.status));
+%}
+
+### Luis acepta la invitación -> 200 (entra como MEMBER)
+POST {{baseUrl}}/api/invitations/{{invitationCode}}/accept
+Authorization: Bearer {{luisToken}}
+
+> {%
+    client.test("aceptar 200", () => {
+        client.assert(response.status === 200, "status " + response.status);
+        client.assert(response.body.myRole === "MEMBER", "rol " + response.body.myRole);
+    });
+%}
+
+### Marta acepta la invitación (el código admite minúsculas y guiones: se normaliza) -> 200
+POST {{baseUrl}}/api/invitations/{{invitationCode}}/accept
+Authorization: Bearer {{martaToken}}
+
+> {%
+    client.test("aceptar 200", () => client.assert(response.status === 200, "status " + response.status));
+%}
+
+### Luis vuelve a aceptarla -> 409 already-member
+POST {{baseUrl}}/api/invitations/{{invitationCode}}/accept
+Authorization: Bearer {{luisToken}}
+
+> {%
+    client.test("409 already-member", () => client.assert(response.status === 409, "status " + response.status));
+%}
+
+### Miembros por orden de alta -> 200 (Ana, Luis, Marta)
+GET {{baseUrl}}/api/households/{{householdId}}/members
+Authorization: Bearer {{luisToken}}
+
+> {%
+    client.test("miembros 200", () => {
+        client.assert(response.status === 200, "status " + response.status);
+        client.assert(response.body.length === 3, "miembros " + response.body.length);
+    });
+%}
+
+### Luis (MEMBER) intenta cambiar el hogar -> 403 owner-role-required
+PATCH {{baseUrl}}/api/households/{{householdId}}
+Authorization: Bearer {{luisToken}}
+Content-Type: application/json
+
+{
+  "splitPolicy": "EQUAL"
+}
+
+> {%
+    const body = typeof response.body === "string" ? JSON.parse(response.body) : response.body;
+    client.test("403 owner-role-required", () => {
+        client.assert(response.status === 403, "status " + response.status);
+        client.assert(body.code === "owner-role-required", "code " + body.code);
+    });
+%}
+
+### Ana, única OWNER, intenta degradarse -> 422 last-owner
+PATCH {{baseUrl}}/api/households/{{householdId}}/members/{{anaId}}
+Authorization: Bearer {{anaToken}}
+Content-Type: application/json
+
+{
+  "role": "MEMBER"
+}
+
+> {%
+    const body = typeof response.body === "string" ? JSON.parse(response.body) : response.body;
+    client.test("422 last-owner", () => {
+        client.assert(response.status === 422, "status " + response.status);
+        client.assert(body.code === "last-owner", "code " + body.code);
+    });
+%}
+
+### Revocar la invitación (idempotente) -> 204
+DELETE {{baseUrl}}/api/households/{{householdId}}/invitations/{{invitationId}}
+Authorization: Bearer {{anaToken}}
+
+> {%
+    client.test("revocar 204", () => client.assert(response.status === 204, "status " + response.status));
+%}

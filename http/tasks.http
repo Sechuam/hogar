@@ -1,0 +1,126 @@
+### Hogar API - 5/6 Tareas de casa
+# Requiere households.http. "Hoy" y "vencida" se calculan en UTC.
+
+### Tarea semanal con rotación Ana -> Luis -> Marta -> 201 (asignada a rotation[0])
+POST {{baseUrl}}/api/households/{{householdId}}/tasks
+Authorization: Bearer {{anaToken}}
+Content-Type: application/json
+
+{
+  "title": "Sacar la basura",
+  "description": "Orgánico y envases, antes de las 21:00",
+  "recurrence": "WEEKLY",
+  "dueDate": "2026-03-20",
+  "rotation": ["{{anaId}}", "{{luisId}}", "{{martaId}}"]
+}
+
+> {%
+    client.test("tarea 201", () => {
+        client.assert(response.status === 201, "status " + response.status);
+        client.assert(response.body.assigneeId === client.global.get("anaId"), "asignada a Ana");
+    });
+    client.global.set("weeklyTaskId", response.body.id);
+    client.global.set("weeklyDueDate", response.body.dueDate);
+%}
+
+### Tarea puntual asignada a Marta -> 201
+POST {{baseUrl}}/api/households/{{householdId}}/tasks
+Authorization: Bearer {{anaToken}}
+Content-Type: application/json
+
+{
+  "title": "Limpiar la nevera",
+  "assigneeId": "{{martaId}}",
+  "recurrence": "NONE",
+  "dueDate": "2026-03-22"
+}
+
+> {%
+    client.test("tarea 201", () => client.assert(response.status === 201, "status " + response.status));
+    client.global.set("fridgeTaskId", response.body.id);
+%}
+
+### Tareas pendientes asignadas a mí (Marta) -> 200
+GET {{baseUrl}}/api/households/{{householdId}}/tasks?mine=true&status=PENDING&page=0&size=20
+Authorization: Bearer {{martaToken}}
+
+> {%
+    client.test("listado 200", () => client.assert(response.status === 200, "status " + response.status));
+%}
+
+### Tareas vencidas del hogar -> 200
+GET {{baseUrl}}/api/households/{{householdId}}/tasks?overdue=true
+Authorization: Bearer {{luisToken}}
+
+> {%
+    client.test("vencidas 200", () => client.assert(response.status === 200, "status " + response.status));
+%}
+
+### Ana completa la ocurrencia actual: avanza dueDate desde el ancla y pasa el turno a Luis -> 200
+POST {{baseUrl}}/api/households/{{householdId}}/tasks/{{weeklyTaskId}}/complete
+Authorization: Bearer {{anaToken}}
+Content-Type: application/json
+
+{
+  "dueDate": "{{weeklyDueDate}}"
+}
+
+> {%
+    client.test("completar 200", () => {
+        client.assert(response.status === 200, "status " + response.status);
+        client.assert(response.body.assigneeId === client.global.get("luisId"), "turno de Luis");
+        client.assert(response.body.status === "PENDING", "sigue pendiente");
+    });
+%}
+
+### Doble toque con la ocurrencia ya completada -> 409 task-occurrence-mismatch (D-050)
+POST {{baseUrl}}/api/households/{{householdId}}/tasks/{{weeklyTaskId}}/complete
+Authorization: Bearer {{anaToken}}
+Content-Type: application/json
+
+{
+  "dueDate": "{{weeklyDueDate}}"
+}
+
+> {%
+    const body = typeof response.body === "string" ? JSON.parse(response.body) : response.body;
+    client.test("409 task-occurrence-mismatch", () => {
+        client.assert(response.status === 409, "status " + response.status);
+        client.assert(body.code === "task-occurrence-mismatch", "code " + body.code);
+    });
+%}
+
+### Histórico de compleciones -> 200
+GET {{baseUrl}}/api/households/{{householdId}}/tasks/{{weeklyTaskId}}/completions
+Authorization: Bearer {{luisToken}}
+
+> {%
+    client.test("histórico 200", () => {
+        client.assert(response.status === 200, "status " + response.status);
+        client.assert(response.body.totalElements === 1, "compleciones " + response.body.totalElements);
+    });
+%}
+
+### Marta completa la tarea puntual (cuerpo opcional) -> 200 DONE
+POST {{baseUrl}}/api/households/{{householdId}}/tasks/{{fridgeTaskId}}/complete
+Authorization: Bearer {{martaToken}}
+
+> {%
+    client.test("DONE", () => client.assert(response.body.status === "DONE", "estado " + response.body.status));
+%}
+
+### Reabrirla -> 200 PENDING (el histórico se conserva)
+POST {{baseUrl}}/api/households/{{householdId}}/tasks/{{fridgeTaskId}}/reopen
+Authorization: Bearer {{martaToken}}
+
+> {%
+    client.test("PENDING", () => client.assert(response.body.status === "PENDING", "estado " + response.body.status));
+%}
+
+### Marta no creó la tarea ni es OWNER -> 403 task-delete-forbidden
+DELETE {{baseUrl}}/api/households/{{householdId}}/tasks/{{weeklyTaskId}}
+Authorization: Bearer {{martaToken}}
+
+> {%
+    client.test("403", () => client.assert(response.status === 403, "status " + response.status));
+%}

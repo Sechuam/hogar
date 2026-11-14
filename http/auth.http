@@ -1,0 +1,235 @@
+### Hogar API - 1/6 Autenticación
+# Orden de la colección: auth -> households -> finances -> invoices -> tasks -> balances.
+# Cada petición guarda en variables globales (client.global) lo que necesitan las siguientes.
+# Los emails llevan {{$timestamp}} para poder repetir el flujo contra la misma BD.
+# Los access tokens duran 15 minutos: si caducan, vuelve a lanzar los "login" del final.
+
+### Probe de liveness (pública, sin token). Actuator completo vive en el puerto 8081.
+GET {{baseUrl}}/livez
+
+> {%
+    client.test("livez 200", () => client.assert(response.status === 200, "status " + response.status));
+%}
+
+### Probe de readiness (incluye la conexión a la BD)
+GET {{baseUrl}}/readyz
+
+> {%
+    client.test("readyz 200", () => client.assert(response.status === 200, "status " + response.status));
+%}
+
+### Registro de Ana (será OWNER del hogar) -> 201
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "ana+{{$timestamp}}@example.test",
+  "password": "contrasena-de-prueba-1",
+  "displayName": "Ana"
+}
+
+> {%
+    client.test("registro 201", () => client.assert(response.status === 201, "status " + response.status));
+    client.global.set("anaId", response.body.user.id);
+    client.global.set("anaEmail", response.body.user.email);
+    client.global.set("anaToken", response.body.accessToken);
+%}
+
+### Registro de Luis -> 201
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "luis+{{$timestamp}}@example.test",
+  "password": "contrasena-de-prueba-2",
+  "displayName": "Luis"
+}
+
+> {%
+    client.test("registro 201", () => client.assert(response.status === 201, "status " + response.status));
+    client.global.set("luisId", response.body.user.id);
+    client.global.set("luisEmail", response.body.user.email);
+    client.global.set("luisToken", response.body.accessToken);
+%}
+
+### Registro de Marta -> 201
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "marta+{{$timestamp}}@example.test",
+  "password": "contrasena-de-prueba-3",
+  "displayName": "Marta"
+}
+
+> {%
+    client.test("registro 201", () => client.assert(response.status === 201, "status " + response.status));
+    client.global.set("martaId", response.body.user.id);
+    client.global.set("martaEmail", response.body.user.email);
+    client.global.set("martaToken", response.body.accessToken);
+%}
+
+### Registro con un email ya usado -> 409 email-already-registered (ProblemDetail)
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "{{anaEmail}}",
+  "password": "otra-contrasena-cualquiera",
+  "displayName": "Ana bis"
+}
+
+> {%
+    const body = typeof response.body === "string" ? JSON.parse(response.body) : response.body;
+    client.test("409 email-already-registered", () => {
+        client.assert(response.status === 409, "status " + response.status);
+        client.assert(body.code === "email-already-registered", "code " + body.code);
+    });
+%}
+
+### Login de Ana -> 200 (el X-Request-Id que envíes vuelve en la respuesta y en los logs)
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+X-Request-Id: demo-login-ana
+
+{
+  "email": "{{anaEmail}}",
+  "password": "contrasena-de-prueba-1"
+}
+
+> {%
+    client.test("login 200", () => {
+        client.assert(response.status === 200, "status " + response.status);
+        client.assert(response.headers.valueOf("X-Request-Id") === "demo-login-ana", "X-Request-Id");
+    });
+    client.global.set("anaToken", response.body.accessToken);
+    client.global.set("anaRefresh", response.body.refreshToken);
+%}
+
+### Contraseña errónea -> 401 invalid-credentials (mismo error si el email no existe)
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{anaEmail}}",
+  "password": "no-es-esta"
+}
+
+> {%
+    const body = typeof response.body === "string" ? JSON.parse(response.body) : response.body;
+    client.test("401 invalid-credentials", () => {
+        client.assert(response.status === 401, "status " + response.status);
+        client.assert(body.code === "invalid-credentials", "code " + body.code);
+    });
+%}
+
+### Usuario autenticado -> 200
+GET {{baseUrl}}/api/users/me
+Authorization: Bearer {{anaToken}}
+
+> {%
+    client.test("me 200", () => client.assert(response.status === 200, "status " + response.status));
+%}
+
+### Sin token -> 401 unauthorized (también como ProblemDetail, con requestId)
+GET {{baseUrl}}/api/users/me
+
+> {%
+    client.test("401 sin token", () => client.assert(response.status === 401, "status " + response.status));
+%}
+
+### Refresh: rota el refresh token (el anterior deja de valer) -> 200
+POST {{baseUrl}}/api/auth/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "{{anaRefresh}}"
+}
+
+> {%
+    client.test("refresh 200", () => client.assert(response.status === 200, "status " + response.status));
+    client.global.set("anaRefreshOld", client.global.get("anaRefresh"));
+    client.global.set("anaRefresh", response.body.refreshToken);
+    client.global.set("anaToken", response.body.accessToken);
+%}
+
+### Reutilizar el refresh ya rotado -> 401 invalid-refresh-token y se revoca toda la familia (D-022)
+POST {{baseUrl}}/api/auth/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "{{anaRefreshOld}}"
+}
+
+> {%
+    client.test("reutilización 401", () => client.assert(response.status === 401, "status " + response.status));
+%}
+
+### El refresh vigente de esa familia también ha quedado revocado -> 401
+POST {{baseUrl}}/api/auth/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "{{anaRefresh}}"
+}
+
+> {%
+    client.test("familia revocada 401", () => client.assert(response.status === 401, "status " + response.status));
+%}
+
+### Logout: idempotente, siempre 204
+POST {{baseUrl}}/api/auth/logout
+Content-Type: application/json
+
+{
+  "refreshToken": "{{anaRefresh}}"
+}
+
+> {%
+    client.test("logout 204", () => client.assert(response.status === 204, "status " + response.status));
+%}
+
+### --- Sesiones nuevas (relánzalas si los access tokens han caducado) ---
+
+### Login de Ana -> 200
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{anaEmail}}",
+  "password": "contrasena-de-prueba-1"
+}
+
+> {%
+    client.test("login 200", () => client.assert(response.status === 200, "status " + response.status));
+    client.global.set("anaToken", response.body.accessToken);
+    client.global.set("anaRefresh", response.body.refreshToken);
+%}
+
+### Login de Luis -> 200
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{luisEmail}}",
+  "password": "contrasena-de-prueba-2"
+}
+
+> {%
+    client.test("login 200", () => client.assert(response.status === 200, "status " + response.status));
+    client.global.set("luisToken", response.body.accessToken);
+%}
+
+### Login de Marta -> 200
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{martaEmail}}",
+  "password": "contrasena-de-prueba-3"
+}
+
+> {%
+    client.test("login 200", () => client.assert(response.status === 200, "status " + response.status));
+    client.global.set("martaToken", response.body.accessToken);
+%}

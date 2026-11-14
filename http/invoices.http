@@ -1,0 +1,87 @@
+### Hogar API - 4/6 Facturas adjuntas a un gasto
+# Requiere finances.http (groceriesExpenseId, pagado por Luis).
+# El tipo se detecta por magic bytes (PDF, JPEG, PNG, WebP); extensión y Content-Type se ignoran.
+
+### Luis (pagador) sube el PDF de la compra -> 201 + Location
+POST {{baseUrl}}/api/households/{{householdId}}/expenses/{{groceriesExpenseId}}/invoice
+Authorization: Bearer {{luisToken}}
+Content-Type: multipart/form-data; boundary=hogar-boundary
+
+--hogar-boundary
+Content-Disposition: form-data; name="file"; filename="factura-ejemplo.pdf"
+Content-Type: application/pdf
+
+< ./factura-ejemplo.pdf
+--hogar-boundary--
+
+> {%
+    client.test("subida 201", () => {
+        client.assert(response.status === 201, "status " + response.status);
+        client.assert(response.body.contentType === "application/pdf", "tipo " + response.body.contentType);
+        client.assert(response.headers.valueOf("Location").endsWith("/invoice"), "Location");
+    });
+%}
+
+### Metadatos (cualquier miembro) -> 200
+GET {{baseUrl}}/api/households/{{householdId}}/expenses/{{groceriesExpenseId}}/invoice/metadata
+Authorization: Bearer {{martaToken}}
+
+> {%
+    client.test("metadatos 200", () => client.assert(response.status === 200, "status " + response.status));
+%}
+
+### Descarga: attachment, nosniff y no-store -> 200 application/pdf
+GET {{baseUrl}}/api/households/{{householdId}}/expenses/{{groceriesExpenseId}}/invoice
+Authorization: Bearer {{anaToken}}
+
+> {%
+    client.test("descarga 200", () => {
+        client.assert(response.status === 200, "status " + response.status);
+        client.assert(response.headers.valueOf("Content-Disposition").startsWith("attachment"), "attachment");
+        client.assert(response.headers.valueOf("X-Content-Type-Options") === "nosniff", "nosniff");
+    });
+%}
+
+### Segunda subida al mismo gasto -> 409 invoice-already-exists
+POST {{baseUrl}}/api/households/{{householdId}}/expenses/{{groceriesExpenseId}}/invoice
+Authorization: Bearer {{luisToken}}
+Content-Type: multipart/form-data; boundary=hogar-boundary
+
+--hogar-boundary
+Content-Disposition: form-data; name="file"; filename="otra.pdf"
+Content-Type: application/pdf
+
+< ./factura-ejemplo.pdf
+--hogar-boundary--
+
+> {%
+    client.test("409", () => client.assert(response.status === 409, "status " + response.status));
+%}
+
+### Un texto disfrazado de PDF en el gasto del alquiler -> 415 unsupported-file-type (no queda nada en disco)
+POST {{baseUrl}}/api/households/{{householdId}}/expenses/{{rentExpenseId}}/invoice
+Authorization: Bearer {{anaToken}}
+Content-Type: multipart/form-data; boundary=hogar-boundary
+
+--hogar-boundary
+Content-Disposition: form-data; name="file"; filename="factura.pdf"
+Content-Type: application/pdf
+
+esto no es un PDF aunque lo diga la extension
+--hogar-boundary--
+
+> {%
+    const body = typeof response.body === "string" ? JSON.parse(response.body) : response.body;
+    client.test("415 unsupported-file-type", () => {
+        client.assert(response.status === 415, "status " + response.status);
+        client.assert(body.code === "unsupported-file-type", "code " + body.code);
+    });
+%}
+
+### Marta no puede borrar la factura de un gasto ajeno -> 403 expense-edit-forbidden
+DELETE {{baseUrl}}/api/households/{{householdId}}/expenses/{{groceriesExpenseId}}/invoice
+Authorization: Bearer {{martaToken}}
+
+> {%
+    client.test("403", () => client.assert(response.status === 403, "status " + response.status));
+%}
