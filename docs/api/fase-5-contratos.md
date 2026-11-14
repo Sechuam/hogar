@@ -53,3 +53,10 @@ Todos bajo `/api/households/{householdId}`, autenticados. No miembro activo → 
 - Dejar el hogar con saldo pendiente está permitido; el ex-miembro sigue apareciendo en balances y
   sugerencias, y se le pueden registrar liquidaciones (no puede consultar el hogar: ya no es miembro).
 - Escalas: todos los importes de la respuesta con escala 2 (`0.00`, nunca `0`).
+
+## 5. Aclaraciones tras QA
+- `amount` de una liquidación: de 0,01 a 99 999 999 999 999 999,99 (límite de `numeric(19,2)`), D-060.
+- Balances y sugerencias se leen con una sola foto de la BD (REPEATABLE READ, D-059).
+- Al crear: 403 `settlement-forbidden` antes que 422 `settlement-party-not-member` (D-061).
+- Dos `DELETE` simultáneos de la misma liquidación: 204 + 404 `settlement-not-found`.
+- Un ex-miembro saldado con movimientos sigue apareciendo con balance `0.00`.
