@@ -36,7 +36,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -265,8 +264,6 @@ class InvoiceHardeningIT extends FinanceApiSupport {
      * grande", que es falso y confunde al cliente.
      */
     @Test
-    @Disabled("BUG: nombre largo no ASCII → 413 file-too-large por el límite de 512 B de cabecera de parte de "
-            + "Tomcat; fix propuesto: server.tomcat.max-part-header-size: 4KB en application.yml")
     void longNonAsciiFilenameOfASmallFileIsAccepted() throws Exception {
         Flat f = flat();
         String name = "😀".repeat(60) + ".pdf";
@@ -335,8 +332,6 @@ class InvoiceHardeningIT extends FinanceApiSupport {
      */
     @ParameterizedTest(name = "{0}")
     @MethodSource("malformedMultipart")
-    @Disabled("BUG: multipart mal formado → 500 internal-error; fix propuesto en shared/error/"
-            + "GlobalExceptionHandler: @ExceptionHandler(MultipartException) → 400 malformed-multipart")
     void malformedMultipartIsBadRequest(String name, String contentType, String body) throws Exception {
         Flat f = flat();
 

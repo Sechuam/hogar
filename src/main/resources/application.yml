@@ -35,6 +35,10 @@ spring:
 server:
   port: ${SERVER_PORT:8080}
   shutdown: graceful
+  tomcat:
+    # Cabecera de cada parte multipart (512 B por defecto): un nombre de fichero no ASCII largo
+    # la superaba y Spring lo reportaba como "fichero demasiado grande".
+    max-part-header-size: 4KB
   error:
     include-stacktrace: never
     include-message: never

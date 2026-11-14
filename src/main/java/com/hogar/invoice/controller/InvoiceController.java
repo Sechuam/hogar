@@ -45,7 +45,7 @@ class InvoiceController {
                                            @RequestPart("file") MultipartFile file) {
         InvoiceResponse created = invoices.upload(householdId, expenseId, currentUser.id(),
                 file.getOriginalFilename(), file);
-        URI location = ServletUriComponentsBuilder.fromCurrentRequest().build().toUri();
+        URI location = ServletUriComponentsBuilder.fromCurrentRequestUri().build().toUri();
         return ResponseEntity.created(location).body(created);
     }
 

@@ -25,6 +25,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.MultipartException;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
 /**
@@ -92,6 +93,17 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
             }
         }
         return "?";
+    }
+
+    /**
+     * Multipart mal formado (cuerpo truncado, sin boundary, cabecera de parte ilegible). Spring lo
+     * analiza antes de elegir controller, así que solo se puede capturar aquí. El tamaño excedido
+     * (subclase) sigue yendo a {@link #handleMaxUploadSizeExceededException} → 413.
+     */
+    @ExceptionHandler(MultipartException.class)
+    ProblemDetail handleMalformedMultipart(MultipartException ex) {
+        return Problems.of(HttpStatus.BAD_REQUEST, "malformed-multipart", "Bad Request",
+                "La petición multipart no es válida.");
     }
 
     @ExceptionHandler(AccessDeniedException.class)
