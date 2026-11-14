@@ -51,7 +51,8 @@ class AuthController {
 
     @Operation(summary = "Registrar una cuenta con email y contraseña",
             description = "Crea el usuario (email guardado en minúsculas) y abre sesión: devuelve access y "
-                    + "refresh token. La contraseña tiene entre 8 y 72 caracteres (límite de BCrypt). "
+                    + "refresh token. La contraseña tiene entre 8 y 72 caracteres "
+                    + "y como mucho 72 bytes en UTF-8 (límite de BCrypt). "
                     + "Rate limiting por IP + email y por IP.")
     @ApiResponse(responseCode = "201", description = "Cuenta creada y sesión abierta.",
             headers = @Header(name = "Location", description = "`/api/users/me`", schema = @Schema(type = "string")))
