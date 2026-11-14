@@ -34,7 +34,7 @@ class TaskController {
      * que es lo que admite JPA ({@code setFirstResult}); más allá Spring Data lanza una excepción (500).
      * Fuera de rango → 400, como {@code page < 0} (D-043).
      */
-    static final int MAX_PAGE = Integer.MAX_VALUE / 100;
+    static final int MAX_PAGE = PageResponse.MAX_PAGE;
 
     private final TaskService tasks;
     private final CurrentUser currentUser;

@@ -55,13 +55,34 @@ class FinanceRobustnessIT extends FinanceApiSupport {
                 "\"\"", "null", "true", "{}"}) {
             assertClientError(raw(HttpMethod.POST, expensesPath(c.id()), c.ana(), expenseJson("\"x\"", date)));
         }
-        // Fechas extremas pero válidas en ISO-8601 y en PostgreSQL: se aceptan (el contrato no las acota,
-        // ni siquiera el año 10000 con signo). Riesgo anotado en el informe de QA, no es un 500.
-        for (String date : new String[] {"\"0001-01-01\"", "\"9999-12-31\"", "\"+10000-01-01\""}) {
+        // Límites del rango admitido (D-047): años 1..9999.
+        for (String date : new String[] {"\"0001-01-01\"", "\"9999-12-31\""}) {
             ResponseEntity<String> r = raw(HttpMethod.POST, expensesPath(c.id()), c.ana(), expenseJson("\"x\"", date));
             assertThat(r.getStatusCode()).as(date + " " + r.getBody()).isEqualTo(HttpStatus.CREATED);
         }
+        // Fuera de rango: a.C. (el driver JDBC las lee corruptas) y años de 5 cifras → 400 del campo.
+        for (String date : new String[] {"\"0000-02-29\"", "\"-0100-03-31\"", "\"+10000-01-01\""}) {
+            assertValidationError(raw(HttpMethod.POST, expensesPath(c.id()), c.ana(), expenseJson("\"x\"", date)),
+                    "date");
+            assertValidationError(raw(HttpMethod.POST, incomesPath(c.id()), c.ana(),
+                    "{\"amount\": 10, \"concept\": \"x\", \"date\": " + date + ", \"recurring\": false}"), "date");
+        }
         assertDbMoneyInvariant(c.id());
+    }
+
+    @Test
+    void unicodeBlankTextAndHugePagesAreBadRequests() {
+        Couple c = couple();
+        String emSpaces = "\"\u2003\u3000\u2003\"";
+        assertValidationError(raw(HttpMethod.POST, expensesPath(c.id()), c.ana(),
+                expenseJson(emSpaces, "\"2026-03-01\"")), "description");
+        assertValidationError(raw(HttpMethod.POST, incomesPath(c.id()), c.ana(),
+                "{\"amount\": 10, \"concept\": " + emSpaces + ", \"date\": \"2026-03-01\", \"recurring\": false}"),
+                "concept");
+        for (String path : new String[] {expensesPath(c.id()), incomesPath(c.id())}) {
+            ResponseEntity<String> r = raw(HttpMethod.GET, path + "?page=2147483647&size=100", c.ana(), null);
+            assertThat(r.getStatusCode()).as(path + " " + r.getBody()).isEqualTo(HttpStatus.BAD_REQUEST);
+        }
     }
 
     @Test

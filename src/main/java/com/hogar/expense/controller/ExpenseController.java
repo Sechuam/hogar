@@ -53,7 +53,7 @@ class ExpenseController {
                                        @RequestParam(required = false) @DateTimeFormat(iso = ISO.DATE) LocalDate to,
                                        @RequestParam(required = false) ExpenseCategory category,
                                        @RequestParam(required = false) UUID paidBy,
-                                       @RequestParam(defaultValue = "0") @Min(0) int page,
+                                       @RequestParam(defaultValue = "0") @Min(0) @Max(PageResponse.MAX_PAGE) int page,
                                        @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
         return expenses.list(householdId, currentUser.id(), from, to, category, paidBy, page, size);
     }

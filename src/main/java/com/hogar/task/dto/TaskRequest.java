@@ -1,10 +1,10 @@
 package com.hogar.task.dto;
 
+import com.hogar.shared.validation.HasText;
 import com.hogar.task.domain.Task;
 import com.hogar.task.domain.TaskRecurrence;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import java.time.LocalDate;
 import java.util.HashSet;
@@ -27,18 +27,12 @@ import java.util.UUID;
  *                   {@code null} o vacía = sin rotación
  */
 public record TaskRequest(
-        @NotNull @Pattern(regexp = NOT_BLANK, message = "no debe estar en blanco") @Size(max = 100) String title,
+        @NotNull @HasText @Size(max = 100) String title,
         @Size(max = 1000) String description,
         UUID assigneeId,
         @NotNull TaskRecurrence recurrence,
         LocalDate dueDate,
         @Size(max = 20) List<@NotNull UUID> rotation) {
-
-    /**
-     * Al menos un carácter que no sea {@code \p{javaWhitespace}}. El cuantificador posesivo evita el
-     * retroceso: coste lineal incluso con textos enormes formados solo por espacios.
-     */
-    static final String NOT_BLANK = "(?s)\\p{javaWhitespace}*+\\P{javaWhitespace}.*";
 
     @AssertTrue(message = "las tareas recurrentes necesitan dueDate")
     public boolean isDueDateValid() {
