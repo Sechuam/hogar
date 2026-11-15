@@ -444,3 +444,13 @@ del proxy; si no, todos los clientes comparten la IP del proxy y el cupo por IP 
 pasa a ser global (sin ello, rotar `X-Forwarded-For` no da cupos nuevos: probado). HSTS y CSP los debe
 poner el proxy TLS (la app no ve `https` sin forward headers). Sin análisis de CVE automático en CI
 (Dependabot / OWASP dependency-check). Rate limit por instancia. Sin borrado de cuenta (RGPD).
+
+## D-067 · El reloj de la aplicación avanza en microsegundos — Aceptada (tras Fase 6)
+**Contexto:** el primer CI en Linux falló: `Clock.systemUTC()` da nanosegundos allí (en macOS,
+microsegundos) y PostgreSQL guarda `timestamptz` con microsegundos, así que el `createdAt` de la
+respuesta de un alta no coincidía con el de un GET posterior. **Decisión:** el bean `Clock` es un
+`MicrosecondClock` que trunca `systemUTC` a microsegundos: la API devuelve el mismo instante al crear y
+al leer en cualquier SO. No vale `Clock.tick(systemUTC, 1 µs)`: su `millis()` divide entre cero y
+rompía el rate limiter de login.
+**Alternativas:** truncar en cada entidad (fácil de olvidar) o relajar los tests (oculta la
+incoherencia de la API).
