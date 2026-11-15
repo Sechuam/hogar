@@ -176,8 +176,15 @@ cruzan features. Cobertura total 98 % de líneas. Decisiones D-062 a D-066.
 **Resultado:** D-068. `PlanLimitsIT` con los límites reales (incluidas altas concurrentes del mismo
 usuario); matriz de acceso y OpenAPI actualizados. Sin migraciones: el campo `plan` ya existía.
 
-## Fase 8 — Cliente móvil 🟡
-Flutter (iOS y Android) en un repositorio aparte, sobre esta API.
+## Fase 8 — Cliente móvil ✅
+Flutter (Android, iOS y web) en un repositorio aparte: [Sechuam/hogar-app](https://github.com/Sechuam/hogar-app).
+
+- Sesión con email (refresh token en almacenamiento seguro, renovación única ante 401 concurrentes),
+  hogares e invitaciones, plan y uso, gastos, saldos con pagos sugeridos y tareas.
+- En la API: CORS opcional para orígenes exactos (D-069), necesario para la versión web.
+
+**Resultado:** probado de punta a punta contra la API en Docker; tests de widgets contra una API falsa y
+CI propio. Fuera de esta versión: login con Google, ingresos y facturas desde la app.
 
 ---
 

@@ -6,10 +6,11 @@ API REST para parejas y compañeros de piso: ingresos, gastos comunes con **repa
 (a partes iguales o proporcional a ingresos), facturas adjuntas, tareas de casa con rotación y
 liquidaciones ("quién debe a quién"). **La app no mueve dinero real**: solo registra y calcula.
 
-**Estado:** fases 0–6 terminadas (setup, auth, finanzas, tareas, facturas, balances y pulido).
-`./mvnw verify` en verde con **657 tests unitarios + 699 de integración** contra PostgreSQL real.
-Plan y resultado de cada fase en [`docs/PLAN.md`](docs/PLAN.md); 61 decisiones registradas en
-[`docs/DECISIONS.md`](docs/DECISIONS.md).
+**Estado:** fases 0–8 terminadas (setup, auth, finanzas, tareas, facturas, balances, pulido, plan
+freemium y cliente). `./mvnw verify` en verde con **687 tests unitarios + 726 de integración** contra
+PostgreSQL real. Plan y resultado de cada fase en [`docs/PLAN.md`](docs/PLAN.md); 69 decisiones
+registradas en [`docs/DECISIONS.md`](docs/DECISIONS.md). Cliente Flutter (Android, iOS y web) en
+[Sechuam/hogar-app](https://github.com/Sechuam/hogar-app).
 
 | | |
 |---|---|
@@ -459,7 +460,6 @@ Deuda anotada en `DECISIONS.md` (al final de cada fase):
 
 Siguientes pasos:
 
-- **Cliente móvil** en Flutter (en curso, repositorio aparte).
 - **Pagos** con RevenueCat o Stripe que cambien el `plan` (las cuotas FREE ya existen).
 - **Zona horaria por hogar** para tareas y vencimientos.
 - **S3** como `StorageService` (la interfaz ya existe) con subida directa y enlace posterior.
