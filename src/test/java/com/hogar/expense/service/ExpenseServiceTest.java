@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -23,6 +24,7 @@ import com.hogar.household.domain.HouseholdRole;
 import com.hogar.household.domain.SplitPolicy;
 import com.hogar.household.dto.ActiveMember;
 import com.hogar.household.dto.HouseholdSplitInfo;
+import com.hogar.household.dto.PlanLimits;
 import com.hogar.household.service.HouseholdQueries;
 import com.hogar.income.service.IncomeQueries;
 import com.hogar.shared.error.BadRequestException;
@@ -220,6 +222,7 @@ class ExpenseServiceTest {
     @Test
     void listPassesFiltersAndPaging() {
         SharedExpense expense = existing(ana, ana);
+        when(households.planLimits(householdId)).thenReturn(PlanLimits.UNLIMITED);
         when(expenses.search(householdId, DATE, DATE, ExpenseCategory.GROCERIES, ana, PageRequest.of(2, 10)))
                 .thenReturn(new PageImpl<>(List.of(expense), PageRequest.of(2, 10), 21));
 
@@ -229,6 +232,20 @@ class ExpenseServiceTest {
         assertThat(page.content()).extracting(ExpenseResponse::id).containsExactly(expense.getId());
         assertThat(page.page()).isEqualTo(2);
         assertThat(page.totalPages()).isEqualTo(3);
+    }
+
+    @Test
+    void freePlanListsOnlyTheVisibleHistoryButKeepsALaterRequestedFrom() {
+        when(households.planLimits(householdId)).thenReturn(new PlanLimits(4, 1, 1L, 12));
+        LocalDate historyStart = LocalDate.of(2025, 4, 1); // NOW = 2026-03-10: marzo y los 11 meses anteriores
+        when(expenses.search(any(), any(), any(), any(), any(), any())).thenReturn(new PageImpl<>(List.of()));
+
+        service.list(householdId, ana, null, null, null, null, 0, 20);
+        service.list(householdId, ana, LocalDate.of(2020, 1, 1), null, null, null, 0, 20);
+        service.list(householdId, ana, DATE, null, null, null, 0, 20);
+
+        verify(expenses, times(2)).search(householdId, historyStart, null, null, null, PageRequest.of(0, 20));
+        verify(expenses).search(householdId, DATE, null, null, null, PageRequest.of(0, 20));
     }
 
     @Test

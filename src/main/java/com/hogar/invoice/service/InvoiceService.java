@@ -1,6 +1,8 @@
 package com.hogar.invoice.service;
 
 import com.hogar.expense.service.ExpenseQueries;
+import com.hogar.household.dto.PlanLimits;
+import com.hogar.household.service.HouseholdQueries;
 import com.hogar.invoice.config.InvoiceProperties;
 import com.hogar.invoice.domain.Invoice;
 import com.hogar.invoice.dto.InvoiceDownload;
@@ -12,6 +14,7 @@ import com.hogar.invoice.service.content.FilenameSanitizer;
 import com.hogar.invoice.service.content.MeteredInputStream;
 import com.hogar.invoice.storage.StorageService;
 import com.hogar.shared.error.BadRequestException;
+import com.hogar.shared.error.BusinessRuleException;
 import com.hogar.shared.error.ConflictException;
 import com.hogar.shared.error.NotFoundException;
 import com.hogar.shared.security.MembershipGuard;
@@ -30,6 +33,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.util.unit.DataSize;
 
 /**
  * Factura adjunta a un gasto (como mucho una). Orden de comprobaciones en todas las operaciones:
@@ -45,24 +49,28 @@ public class InvoiceService {
     static final String INVOICE_NOT_FOUND = "invoice-not-found";
     static final String INVOICE_ALREADY_EXISTS = "invoice-already-exists";
     static final String EMPTY_FILE = "empty-file";
+    static final String PLAN_STORAGE_LIMIT = "plan-storage-limit";
 
     private static final Logger log = LoggerFactory.getLogger(InvoiceService.class);
 
     private final InvoiceRepository invoices;
     private final MembershipGuard guard;
     private final ExpenseQueries expenses;
+    private final HouseholdQueries households;
     private final StorageService storage;
     private final InvoiceFileCleanup cleanup;
     private final InvoiceProperties properties;
     private final TransactionTemplate readOnlyTransaction;
     private final Clock clock;
 
-    InvoiceService(InvoiceRepository invoices, MembershipGuard guard, ExpenseQueries expenses, StorageService storage,
+    InvoiceService(InvoiceRepository invoices, MembershipGuard guard, ExpenseQueries expenses,
+                   HouseholdQueries households, StorageService storage,
                    InvoiceFileCleanup cleanup, InvoiceProperties properties,
                    PlatformTransactionManager transactionManager, Clock clock) {
         this.invoices = invoices;
         this.guard = guard;
         this.expenses = expenses;
+        this.households = households;
         this.storage = storage;
         this.cleanup = cleanup;
         this.properties = properties;
@@ -82,6 +90,7 @@ public class InvoiceService {
      * @throws BadRequestException           {@code empty-file}
      * @throws UnsupportedFileTypeException  si no es PDF, JPEG, PNG ni WebP
      * @throws FileTooLargeException         si supera {@code hogar.invoices.max-size}
+     * @throws BusinessRuleException         {@code plan-storage-limit} si no cabe en el plan del hogar
      */
     @Transactional
     public InvoiceResponse upload(UUID householdId, UUID expenseId, UUID userId, String originalFilename,
@@ -96,12 +105,28 @@ public class InvoiceService {
         StoredContent stored = store(storageKey, content);
         // Tras escribir con éxito: si store() falla, ya limpia su temporal y no hay nada que borrar.
         cleanup.deleteIfRolledBack(storageKey);
+        requireStorageQuota(householdId, stored.sizeBytes());
 
         Invoice invoice = Invoice.create(householdId, expenseId, storageKey, stored.type().contentType(),
                 stored.sizeBytes(), stored.sha256(), FilenameSanitizer.sanitize(originalFilename), userId,
                 Instant.now(clock));
         // saveAndFlush: cualquier fallo de BD salta aquí, dentro de la transacción → rollback → borrado.
         return InvoiceMapper.toResponse(invoices.saveAndFlush(invoice));
+    }
+
+    /**
+     * Comprueba el espacio del plan una vez conocido el tamaño real (se copia en streaming). Bloquea
+     * la fila del hogar: dos subidas simultáneas a gastos distintos no pueden superar juntas el límite.
+     * Se bloquea después del gasto, nunca antes, para mantener siempre el mismo orden (gasto → hogar).
+     */
+    private void requireStorageQuota(UUID householdId, long newBytes) {
+        PlanLimits limits = households.lockPlanUsage(householdId);
+        if (!limits.allowsStorage(invoices.sumSizeBytes(householdId) + newBytes)) {
+            throw new BusinessRuleException(PLAN_STORAGE_LIMIT,
+                    "La factura no cabe en el espacio de facturas del plan del hogar ("
+                            + DataSize.ofBytes(limits.maxStorageBytes()).toMegabytes() + " MB). "
+                            + "Borra facturas antiguas o pasa el hogar a PREMIUM.");
+        }
     }
 
     /** Metadatos de la factura; cualquier miembro del hogar. */

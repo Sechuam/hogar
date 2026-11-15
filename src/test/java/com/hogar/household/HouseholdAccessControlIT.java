@@ -78,6 +78,7 @@ class HouseholdAccessControlIT extends HouseholdApiSupport {
     static final List<Endpoint> ENDPOINTS = List.of(
             new Endpoint(HttpMethod.GET, "/api/households/{h}", null, false),
             new Endpoint(HttpMethod.PATCH, "/api/households/{h}", Map.of("name", "Hackeado"), true),
+            new Endpoint(HttpMethod.GET, "/api/households/{h}/plan", null, false),
             new Endpoint(HttpMethod.GET, "/api/households/{h}/members", null, false),
             new Endpoint(HttpMethod.PATCH, "/api/households/{h}/members/{u}", Map.of("role", "MEMBER"), true),
             new Endpoint(HttpMethod.DELETE, "/api/households/{h}/members/{u}", null, true),

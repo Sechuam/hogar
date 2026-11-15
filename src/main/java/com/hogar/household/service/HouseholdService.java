@@ -1,16 +1,21 @@
 package com.hogar.household.service;
 
 import com.hogar.household.domain.Household;
+import com.hogar.household.domain.HouseholdPlan;
 import com.hogar.household.domain.HouseholdRole;
 import com.hogar.household.domain.Membership;
 import com.hogar.household.dto.CreateHouseholdRequest;
 import com.hogar.household.dto.HouseholdResponse;
+import com.hogar.household.dto.PlanLimits;
+import com.hogar.household.dto.PlanResponse;
 import com.hogar.household.dto.UpdateHouseholdRequest;
 import com.hogar.household.repository.ActiveMemberCount;
 import com.hogar.household.repository.HouseholdRepository;
 import com.hogar.household.repository.MembershipRepository;
+import com.hogar.shared.error.BusinessRuleException;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -26,19 +31,36 @@ public class HouseholdService {
     private final HouseholdRepository households;
     private final MembershipRepository memberships;
     private final HouseholdMembershipGuard guard;
+    private final HouseholdPlans plans;
+    private final HouseholdStorageUsage storageUsage;
     private final Clock clock;
 
     HouseholdService(HouseholdRepository households, MembershipRepository memberships,
-                     HouseholdMembershipGuard guard, Clock clock) {
+                     HouseholdMembershipGuard guard, HouseholdPlans plans, HouseholdStorageUsage storageUsage,
+                     Clock clock) {
         this.households = households;
         this.memberships = memberships;
         this.guard = guard;
+        this.plans = plans;
+        this.storageUsage = storageUsage;
         this.clock = clock;
     }
 
-    /** Crea el hogar con su creador como único OWNER. */
+    /**
+     * Crea el hogar (siempre FREE) con su creador como único OWNER.
+     *
+     * @throws BusinessRuleException {@code plan-household-limit} si ya es OWNER de tantos hogares FREE
+     *                               como permite el plan
+     */
     @Transactional
     public HouseholdResponse create(UUID userId, CreateHouseholdRequest request) {
+        households.lockHouseholdCreation(userId);
+        PlanLimits free = plans.limits(HouseholdPlan.FREE);
+        if (!free.allowsAnotherOwnedHousehold(households.countFreeOwnedBy(userId))) {
+            throw new BusinessRuleException(HouseholdPlans.PLAN_HOUSEHOLD_LIMIT,
+                    "El plan FREE permite ser OWNER de " + free.maxOwnedHouseholds()
+                            + " hogar(es). Pasa uno a PREMIUM o deja de ser su OWNER para crear otro.");
+        }
         Instant now = Instant.now(clock);
         Household household = households.save(
                 Household.create(request.name(), request.splitPolicy(), request.currency(), now));
@@ -86,6 +108,17 @@ public class HouseholdService {
             household.changeSplitPolicy(request.splitPolicy(), now);
         }
         return toResponse(household, me);
+    }
+
+    /** Plan, límites y uso del hogar. Cualquier miembro activo. */
+    @Transactional(readOnly = true)
+    public PlanResponse plan(UUID householdId, UUID userId) {
+        guard.activeMembership(householdId, userId);
+        Household household = load(householdId);
+        PlanLimits limits = plans.limits(household.getPlan());
+        LocalDate historyStart = limits.historyStart(LocalDate.now(clock)).orElse(null);
+        return new PlanResponse(household.getPlan(), limits, new PlanResponse.PlanUsage(
+                memberships.countActive(householdId), storageUsage.usedBytes(householdId), historyStart));
     }
 
     private HouseholdResponse toResponse(Household household, Membership me) {

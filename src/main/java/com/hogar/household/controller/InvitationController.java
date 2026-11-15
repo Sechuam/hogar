@@ -104,7 +104,7 @@ class InvitationController {
             + "hogar ya no tiene miembros.")
     @ApiResponse(responseCode = "409", description = "`already-member`: ya eres miembro activo de ese hogar.")
     @ApiResponse(responseCode = "422", description = "`invitation-expired`: la invitación ha caducado." + ApiDoc.NL
-            + "`invitation-exhausted`: se agotaron sus usos.")
+            + "`invitation-exhausted`: se agotaron sus usos." + ApiDoc.NL + ApiDoc.PLAN_MEMBER_LIMIT)
     @PostMapping("/api/invitations/{code}/accept")
     HouseholdResponse accept(@Parameter(description = "Código de invitación", example = "K7M2-Q9XW-4P") @PathVariable String code) {
         return invitations.accept(code, currentUser.id());

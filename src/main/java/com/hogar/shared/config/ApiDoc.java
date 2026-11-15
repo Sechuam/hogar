@@ -68,6 +68,19 @@ public final class ApiDoc {
     public static final String MEMBER_NOT_FOUND =
             "`member-not-found`: ese usuario no es miembro activo del hogar.";
 
+    // ---- Límites del plan FREE (D-068) ----
+
+    public static final String PLAN_HOUSEHOLD_LIMIT =
+            "`plan-household-limit`: ya eres OWNER de tantos hogares FREE como permite el plan.";
+    public static final String PLAN_MEMBER_LIMIT =
+            "`plan-member-limit`: el hogar ya tiene el máximo de miembros de su plan.";
+    public static final String PLAN_STORAGE_LIMIT =
+            "`plan-storage-limit`: la factura haría superar el espacio de facturas del plan del hogar.";
+
+    public static final String FREE_HISTORY_WINDOW =
+            " En un hogar FREE solo se listan los de los últimos 12 meses naturales (el actual incluido), "
+                    + "aunque `from` sea anterior; el detalle por ID y los balances usan todo el histórico (D-068).";
+
     // ---- Paginación ----
 
     public static final String PAGE = "Número de página, empezando en 0 (máximo 21474836).";

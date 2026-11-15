@@ -14,6 +14,14 @@ hogar:
   storage:
     local:
       base-dir: target/test-storage
+  # Los IT comparten BD y usuarios crean varios hogares con fechas antiguas: límites FREE holgados.
+  # Los límites reales (application.yml) se prueban en PlanLimitsIT, con su propio contexto.
+  plans:
+    free:
+      max-members: 1000
+      max-owned-households: 1000
+      max-storage: 10GB
+      history-months: 120000
 
 # Puerto de gestión aleatorio (como server.port en los IT): se lee con @LocalManagementPort.
 # Spring Boot desactiva la exportación de métricas en tests (salvo @AutoConfigureObservability, que

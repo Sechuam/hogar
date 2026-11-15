@@ -68,7 +68,7 @@ class SettlementController {
 
     /** {@code size} fuera de 1..100 o {@code page} fuera de 0..{@code MAX_PAGE} → 400 (D-043). */
     @Operation(summary = "Listar las liquidaciones del hogar",
-            description = "Orden: fecha descendente y, a igualdad, la más reciente primero.")
+            description = "Orden: fecha descendente y, a igualdad, la más reciente primero." + ApiDoc.FREE_HISTORY_WINDOW)
     @ApiResponse(responseCode = "200", description = "Página de liquidaciones.")
     @ApiResponse(responseCode = "400", description = ApiDoc.BAD_PAGINATION + ApiDoc.NL + ApiDoc.INVALID_DATE_RANGE)
     @ApiResponse(responseCode = "404", description = ApiDoc.HOUSEHOLD_NOT_FOUND)

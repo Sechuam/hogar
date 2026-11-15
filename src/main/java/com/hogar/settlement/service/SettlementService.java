@@ -83,7 +83,9 @@ public class SettlementService {
         if (fromOrNull != null && toOrNull != null && fromOrNull.isAfter(toOrNull)) {
             throw new BadRequestException(INVALID_DATE_RANGE, "'from' no puede ser posterior a 'to'.");
         }
-        return PageResponse.of(settlements.search(householdId, fromOrNull, toOrNull, participantOrNull,
+        // Plan FREE: solo los últimos meses (D-068); los balances sí usan todo el histórico.
+        LocalDate from = households.planLimits(householdId).visibleFrom(fromOrNull, LocalDate.now(clock));
+        return PageResponse.of(settlements.search(householdId, from, toOrNull, participantOrNull,
                 PageRequest.of(page, size)), SettlementMapper::toResponse);
     }
 
