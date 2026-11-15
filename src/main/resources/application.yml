@@ -83,6 +83,10 @@ hogar:
       refill-period: 1m
       # Cupo por IP sumando todos los emails (enumeración / password spraying).
       ip-capacity: 30
+  cors:
+    # Orígenes de navegador permitidos, separados por comas (p. ej. el cliente web en desarrollo).
+    # Vacío = sin CORS (D-069).
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:}
   plans:
     # Límites del plan FREE; PREMIUM no tiene límites (D-068). El plan se cambia a mano (sin pagos).
     free:

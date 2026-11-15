@@ -77,6 +77,7 @@ Todas en [`.env.example`](.env.example); `.env` no se versiona. Ningún secreto 
 | `DOCKER_SPRING_PROFILES` | Perfil dentro de Compose (`docker` por defecto): logs JSON ECS |
 | `GOOGLE_CLIENT_IDS` | Client IDs de Google aceptados como `aud` (vacío = login con Google desactivado en la práctica) |
 | `STORAGE_DIR` | Directorio de las facturas (en Compose, volumen `invoices`) |
+| `CORS_ALLOWED_ORIGINS` | Orígenes de navegador permitidos, separados por comas (vacío = sin CORS; p. ej. `http://localhost:5000` para el cliente Flutter web) |
 
 ## Arquitectura
 
@@ -442,6 +443,8 @@ informe de cobertura como artefacto, informes de Surefire/Failsafe si falla y bu
 - Errores sin trazas ni mensajes internos; errores de BD registrados sin datos personales
   ([D-046](docs/DECISIONS.md#d-046--los-errores-de-bd-se-registran-sin-datos--aceptada-fase-2)).
 - Actuator en un puerto de gestión separado, no publicado; imagen Docker con JRE y usuario no root.
+- CORS cerrado por defecto; solo orígenes exactos configurados, sin credenciales
+  ([D-069](docs/DECISIONS.md#d-069--cors-opcional-por-lista-de-orígenes-exactos--aceptada-fase-8)).
 
 ## Deuda conocida y siguientes pasos
 
