@@ -68,7 +68,7 @@ class ExpenseController {
     /** {@code size} fuera de 1..100 o {@code page} negativa → 400 (no se acota en silencio). */
     @Operation(summary = "Listar los gastos del hogar",
             description = "Filtros opcionales y combinables. Orden: `date` descendente y, a igualdad, el más "
-                    + "reciente primero.")
+                    + "reciente primero." + ApiDoc.FREE_HISTORY_WINDOW)
     @ApiResponse(responseCode = "200", description = "Página de gastos.")
     @ApiResponse(responseCode = "400", description = ApiDoc.BAD_PAGINATION + ApiDoc.NL + ApiDoc.INVALID_DATE_RANGE)
     @ApiResponse(responseCode = "404", description = ApiDoc.HOUSEHOLD_NOT_FOUND)

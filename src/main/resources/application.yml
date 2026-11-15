@@ -83,6 +83,13 @@ hogar:
       refill-period: 1m
       # Cupo por IP sumando todos los emails (enumeración / password spraying).
       ip-capacity: 30
+  plans:
+    # Límites del plan FREE; PREMIUM no tiene límites (D-068). El plan se cambia a mano (sin pagos).
+    free:
+      max-members: 4
+      max-owned-households: 1
+      max-storage: 50MB
+      history-months: 12
   invitations:
     default-ttl: 7d
     max-ttl: 30d

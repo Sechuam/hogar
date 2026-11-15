@@ -9,7 +9,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.hogar.household.config.InvitationProperties;
+import com.hogar.household.config.PlanProperties;
 import com.hogar.household.domain.Household;
+import com.hogar.household.domain.HouseholdPlan;
 import com.hogar.household.domain.HouseholdRole;
 import com.hogar.household.domain.Invitation;
 import com.hogar.household.domain.Membership;
@@ -33,13 +35,16 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
-import org.springframework.data.domain.Limit;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Limit;
+import org.springframework.util.unit.DataSize;
 
 @ExtendWith(MockitoExtension.class)
 class InvitationServiceTest {
 
     private static final Instant NOW = Instant.parse("2026-03-01T10:00:00Z");
+    private static final HouseholdPlans PLANS =
+            new HouseholdPlans(new PlanProperties(4, 1, DataSize.ofMegabytes(50), 12));
     private static final String CODE = "ABCDE12345";
 
     @Mock
@@ -61,7 +66,7 @@ class InvitationServiceTest {
     void setUp() {
         service = new InvitationService(invitations, households, memberships,
                 new HouseholdMembershipGuard(memberships), codeGenerator,
-                new InvitationProperties(Duration.ofDays(7), Duration.ofDays(30)), Clock.fixed(NOW, ZoneOffset.UTC));
+                new InvitationProperties(Duration.ofDays(7), Duration.ofDays(30)), PLANS, Clock.fixed(NOW, ZoneOffset.UTC));
         household = Household.create("Piso", null, null, NOW.minusSeconds(3600));
         householdId = household.getId();
         lenient().when(invitations.save(any(Invitation.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -152,7 +157,7 @@ class InvitationServiceTest {
     void defaultTtlIsAlsoCappedAtMax() {
         InvitationService capped = new InvitationService(invitations, households, memberships,
                 new HouseholdMembershipGuard(memberships), codeGenerator,
-                new InvitationProperties(Duration.ofDays(60), Duration.ofDays(30)), Clock.fixed(NOW, ZoneOffset.UTC));
+                new InvitationProperties(Duration.ofDays(60), Duration.ofDays(30)), PLANS, Clock.fixed(NOW, ZoneOffset.UTC));
 
         assertThat(capped.ttl(null)).isEqualTo(Duration.ofDays(30));
     }
@@ -199,6 +204,28 @@ class InvitationServiceTest {
         assertThat(response.memberCount()).isEqualTo(2);
         assertThat(invitation.getUses()).isEqualTo(1);
         verify(memberships).save(any(Membership.class));
+    }
+
+    @Test
+    void freeHouseholdAtTheMemberLimitRejectsTheInvitationWithoutUsingIt() {
+        Invitation invitation = givenInvitation(NOW.minusSeconds(60), NOW.plusSeconds(60), null);
+        givenHouseholdWithMembers(4);
+        when(memberships.existsActive(householdId, joinerId)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.accept(CODE, joinerId))
+                .satisfies(e -> assertThat(codeOf(e)).isEqualTo("plan-member-limit"));
+        assertThat(invitation.getUses()).isZero();
+        verify(memberships, never()).save(any(Membership.class));
+    }
+
+    @Test
+    void premiumHouseholdHasNoMemberLimit() {
+        givenInvitation(NOW.minusSeconds(60), NOW.plusSeconds(60), null);
+        household.changePlan(HouseholdPlan.PREMIUM, NOW);
+        givenHouseholdWithMembers(40);
+        when(memberships.existsActive(householdId, joinerId)).thenReturn(false);
+
+        assertThat(service.accept(CODE, joinerId).memberCount()).isEqualTo(41);
     }
 
     @Test

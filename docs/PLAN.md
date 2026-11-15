@@ -165,8 +165,22 @@ QA final: auditoría de seguridad (corregidos la API sin JWT si `MANAGEMENT_PORT
 500 con contraseñas de más de 72 bytes), matriz de acceso que falla ante endpoints nuevos, casos que
 cruzan features. Cobertura total 98 % de líneas. Decisiones D-062 a D-066.
 
+## Fase 7 — Freemium ✅
+**Rama:** `fase-7-freemium`
+
+- Límites FREE configurables (`hogar.plans.free.*`): 4 miembros por hogar, 1 hogar FREE como OWNER,
+  50 MB de facturas por hogar, 12 meses visibles en listados de gastos y liquidaciones. PREMIUM sin límites.
+- `GET /api/households/{id}/plan` con plan, límites y uso actual.
+- Comprobaciones a prueba de concurrencia (fila del hogar o bloqueo consultivo por usuario).
+
+**Resultado:** D-068. `PlanLimitsIT` con los límites reales (incluidas altas concurrentes del mismo
+usuario); matriz de acceso y OpenAPI actualizados. Sin migraciones: el campo `plan` ya existía.
+
+## Fase 8 — Cliente móvil 🟡
+Flutter (iOS y Android) en un repositorio aparte, sobre esta API.
+
 ---
 
 ## Fuera de alcance (por ahora)
-Cliente móvil (React Native + Expo), pagos/RevenueCat (solo campo `plan`), notificaciones push,
-multi-moneda dentro de un hogar, S3 real, borrado de cuenta (RGPD) — candidato a Fase 7.
+Pagos reales (RevenueCat; hoy el plan se cambia a mano), notificaciones push, multi-moneda dentro de
+un hogar, S3 real, borrado de cuenta (RGPD).

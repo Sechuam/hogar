@@ -14,6 +14,7 @@ import com.hogar.household.domain.HouseholdRole;
 import com.hogar.household.domain.SplitPolicy;
 import com.hogar.household.dto.ActiveMember;
 import com.hogar.household.dto.HouseholdSplitInfo;
+import com.hogar.household.dto.PlanLimits;
 import com.hogar.household.service.HouseholdQueries;
 import com.hogar.settlement.domain.Settlement;
 import com.hogar.settlement.dto.SettlementRequest;
@@ -192,6 +193,7 @@ class SettlementServiceTest {
 
     @Test
     void listPassesFiltersAndMapsPage() {
+        when(households.planLimits(householdId)).thenReturn(PlanLimits.UNLIMITED);
         Settlement s = Settlement.create(householdId, luis, ana, new BigDecimal("5"), "EUR", DATE, null, luis, NOW);
         when(settlements.search(householdId, DATE, DATE, luis, PageRequest.of(1, 5)))
                 .thenReturn(new PageImpl<>(List.of(s), PageRequest.of(1, 5), 6));
@@ -201,6 +203,15 @@ class SettlementServiceTest {
         assertThat(page.content()).extracting(SettlementResponse::id).containsExactly(s.getId());
         assertThat(page.totalElements()).isEqualTo(6);
         assertThat(page.page()).isEqualTo(1);
+    }
+
+    @Test
+    void freePlanListsOnlyTheVisibleHistory() {
+        when(households.planLimits(householdId)).thenReturn(new PlanLimits(4, 1, 1L, 12));
+        when(settlements.search(householdId, LocalDate.of(2025, 4, 1), null, null, PageRequest.of(0, 20)))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        assertThat(service.list(householdId, ana, LocalDate.of(2019, 6, 1), null, null, 0, 20).content()).isEmpty();
     }
 
     @Test

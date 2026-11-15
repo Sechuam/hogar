@@ -454,3 +454,31 @@ al leer en cualquier SO. No vale `Clock.tick(systemUTC, 1 µs)`: su `millis()` d
 rompía el rate limiter de login.
 **Alternativas:** truncar en cada entidad (fácil de olvidar) o relajar los tests (oculta la
 incoherencia de la API).
+
+## D-068 · Plan freemium: límites de uso por hogar — Aceptada (Fase 7)
+**Contexto:** el campo `plan` (FREE/PREMIUM) existía desde la Fase 1 sin efecto. No hay pagos: el plan
+se cambia a mano (SQL) hasta integrar un proveedor. **Decisión:** FREE limita el uso, no las funciones:
+- **4 miembros activos** por hogar: se comprueba al aceptar una invitación, con la fila del hogar ya
+  bloqueada (la misma que serializa altas y bajas de miembros); el intento fallido no gasta un uso.
+- **1 hogar FREE como OWNER** por usuario: se comprueba al crear, bajo un bloqueo consultivo de
+  PostgreSQL por usuario (`pg_advisory_xact_lock`), porque no hay fila que bloquear para "hogares de
+  este usuario". Ser MEMBER de otros hogares no cuenta. Ascender a OWNER a alguien no se comprueba
+  (regla simple; el abuso no compensa con 4 miembros por hogar).
+- **50 MB de facturas** por hogar: se comprueba tras copiar el fichero (el tamaño real solo se conoce
+  en streaming) bloqueando el hogar **después** del gasto, siempre en ese orden para no crear
+  interbloqueos; si no cabe, el rollback borra el fichero (D-049).
+- **Historial de 12 meses naturales** en los listados de gastos y liquidaciones: el `from` efectivo es el
+  más tardío entre el pedido y el inicio de la ventana. Los ingresos no se acotan (los recurrentes
+  alimentan el reparto proporcional), el detalle por ID sigue accesible y los **balances usan todo el
+  histórico**: ocultar datos nunca cambia lo que se debe.
+
+Errores 422: `plan-member-limit`, `plan-household-limit`, `plan-storage-limit`. Pasar a FREE no borra
+nada: solo bloquea lo nuevo que supere el límite. `GET /api/households/{id}/plan` devuelve plan, límites
+(`null` = sin límite) y uso, para que el cliente muestre el estado antes de chocar con un 422.
+
+**Diseño:** límites en configuración (`hogar.plans.free.*`), no en código ni en BD: se ajustan sin
+migración. El uso de almacenamiento lo calcula invoice e implementa el puerto `HouseholdStorageUsage`
+de household (inversión de dependencias: household no depende de invoice). Los IT generales usan
+límites holgados; `PlanLimitsIT` arranca con los reales.
+**Alternativas:** limitar funciones (sin facturas en FREE) — más simple pero menos realista; tabla de
+planes en BD — prematuro sin pagos; contar hogares en el usuario — el plan es del hogar, no de la persona.

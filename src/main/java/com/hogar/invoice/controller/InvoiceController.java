@@ -68,6 +68,7 @@ class InvoiceController {
     @ApiResponse(responseCode = "413", description = "`file-too-large`: el fichero supera el tamaño máximo (10 MB).")
     @ApiResponse(responseCode = "415", description = "`unsupported-file-type`: el contenido no es PDF, JPEG, PNG ni "
             + "WebP." + ApiDoc.NL + "`unsupported-media-type`: la petición no es `multipart/form-data`.")
+    @ApiResponse(responseCode = "422", description = ApiDoc.PLAN_STORAGE_LIMIT)
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     ResponseEntity<InvoiceResponse> upload(@Parameter(description = "ID del hogar") @PathVariable UUID householdId, @Parameter(description = "ID del gasto") @PathVariable UUID expenseId,
                                            @Parameter(description = "Fichero de la factura (PDF, JPEG, PNG o WebP; máx. 10 MB)") @RequestPart("file") MultipartFile file) {

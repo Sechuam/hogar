@@ -304,13 +304,19 @@ cada `code` de error) en **Swagger UI**; los contratos de cada fase están en [`
 | Área | Endpoints principales | Contrato |
 |---|---|---|
 | Autenticación | `POST /api/auth/register` · `login` · `google` · `refresh` · `logout`; `GET /api/users/me` | [Fase 1](docs/api/fase-1-contratos.md) |
-| Hogares y miembros | `POST/GET /api/households`, `GET/PATCH /api/households/{id}`, `GET …/members`, `PATCH/DELETE …/members/{userId}`, `POST …/leave` | [Fase 1](docs/api/fase-1-contratos.md) |
+| Hogares y miembros | `POST/GET /api/households`, `GET/PATCH /api/households/{id}`, `GET …/plan`, `GET …/members`, `PATCH/DELETE …/members/{userId}`, `POST …/leave` | [Fase 1](docs/api/fase-1-contratos.md) |
 | Invitaciones | `POST/GET …/invitations`, `GET/DELETE …/invitations/{invitationId}`, `POST /api/invitations/{code}/accept` | [Fase 1](docs/api/fase-1-contratos.md) |
 | Ingresos | `POST/GET …/incomes`, `GET/PUT/DELETE …/incomes/{incomeId}`, `GET …/incomes/summary?month=` | [Fase 2](docs/api/fase-2-contratos.md) |
 | Gastos y reparto | `POST/GET …/expenses` (filtros `from`, `to`, `category`, `paidBy`), `GET/PUT/DELETE …/expenses/{expenseId}` | [Fase 2](docs/api/fase-2-contratos.md) |
 | Tareas | `POST/GET …/tasks` (filtros `mine`, `assigneeId`, `status`, `overdue`), `GET/PUT/DELETE …/tasks/{taskId}`, `POST …/complete`, `POST …/reopen`, `GET …/completions` | [Fase 3](docs/api/fase-3-contratos.md) |
 | Facturas | `POST/GET/DELETE …/expenses/{expenseId}/invoice` (multipart / descarga), `GET …/invoice/metadata` | [Fase 4](docs/api/fase-4-contratos.md) |
 | Balances y liquidaciones | `GET …/balances`, `GET …/settlements/suggested`, `POST/GET …/settlements`, `GET/DELETE …/settlements/{settlementId}` | [Fase 5](docs/api/fase-5-contratos.md) |
+
+**Plan FREE / PREMIUM** ([D-068](docs/DECISIONS.md#d-068--plan-freemium-límites-de-uso-por-hogar--aceptada-fase-7)):
+FREE admite 4 miembros por hogar, ser OWNER de 1 hogar FREE, 50 MB de facturas y lista los gastos y
+liquidaciones de los últimos 12 meses (los balances siempre usan todo el histórico). PREMIUM no tiene
+límites. Superar un límite da 422 (`plan-member-limit`, `plan-household-limit`, `plan-storage-limit`);
+no hay pagos, el plan se cambia a mano.
 
 Convenciones REST: recursos en plural, `201 + Location` al crear, paginación `page`/`size` (máx. 100;
 fuera de rango → 400, nunca se acota en silencio) con un `PageResponse` propio
@@ -444,17 +450,18 @@ Deuda anotada en `DECISIONS.md` (al final de cada fase):
 - Rate limiting en memoria, por instancia: con varias réplicas pasaría a Redis o PostgreSQL.
 - "Hoy" y "vencida" se calculan en UTC: falta la zona horaria por hogar.
 - `PUT` sin `If-Match` ni versión en el cuerpo: un cliente con datos viejos puede pisar un cambio posterior.
-- Facturas: sin cuota de disco, sin limpieza periódica de huérfanos y sin re-comprobar el SHA-256 al descargar.
+- Facturas: sin limpieza periódica de huérfanos y sin re-comprobar el SHA-256 al descargar.
+- El plan se cambia por SQL: falta un proveedor de pagos y su webhook.
 - Sin verificación de email por correo; un ex-miembro no puede consultar su saldo pendiente.
 
 Siguientes pasos:
 
-- **Cliente móvil** (React Native + Expo) sobre esta API.
-- **Plan de pago** con RevenueCat (hoy solo existe el campo `plan` FREE/PREMIUM) y **cuotas** por plan.
+- **Cliente móvil** en Flutter (en curso, repositorio aparte).
+- **Pagos** con RevenueCat o Stripe que cambien el `plan` (las cuotas FREE ya existen).
 - **Zona horaria por hogar** para tareas y vencimientos.
 - **S3** como `StorageService` (la interfaz ya existe) con subida directa y enlace posterior.
 - **Borrado de cuenta (RGPD)**: anonimizar al usuario conservando el histórico de gastos del hogar.
-- Verificación de email, migración a Spring Boot 4 y repositorio remoto con CI público.
+- Verificación de email y migración a Spring Boot 4.
 
 ---
 

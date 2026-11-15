@@ -87,7 +87,9 @@ public class ExpenseService {
         if (fromOrNull != null && toOrNull != null && fromOrNull.isAfter(toOrNull)) {
             throw new BadRequestException(INVALID_DATE_RANGE, "'from' no puede ser posterior a 'to'.");
         }
-        return PageResponse.of(expenses.search(householdId, fromOrNull, toOrNull, categoryOrNull, paidByOrNull,
+        // Plan FREE: solo los últimos meses (D-068); los balances sí usan todo el histórico.
+        LocalDate from = households.planLimits(householdId).visibleFrom(fromOrNull, LocalDate.now(clock));
+        return PageResponse.of(expenses.search(householdId, from, toOrNull, categoryOrNull, paidByOrNull,
                 PageRequest.of(page, size)), ExpenseMapper::toResponse);
     }
 

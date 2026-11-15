@@ -8,6 +8,7 @@ import com.hogar.household.domain.Membership;
 import com.hogar.household.dto.CreateInvitationRequest;
 import com.hogar.household.dto.HouseholdResponse;
 import com.hogar.household.dto.InvitationResponse;
+import com.hogar.household.dto.PlanLimits;
 import com.hogar.household.repository.HouseholdRepository;
 import com.hogar.household.repository.InvitationRepository;
 import com.hogar.household.repository.MembershipRepository;
@@ -50,17 +51,20 @@ public class InvitationService {
     private final HouseholdMembershipGuard guard;
     private final InvitationCodeGenerator codeGenerator;
     private final InvitationProperties properties;
+    private final HouseholdPlans plans;
     private final Clock clock;
 
     InvitationService(InvitationRepository invitations, HouseholdRepository households,
                       MembershipRepository memberships, HouseholdMembershipGuard guard,
-                      InvitationCodeGenerator codeGenerator, InvitationProperties properties, Clock clock) {
+                      InvitationCodeGenerator codeGenerator, InvitationProperties properties, HouseholdPlans plans,
+                      Clock clock) {
         this.invitations = invitations;
         this.households = households;
         this.memberships = memberships;
         this.guard = guard;
         this.codeGenerator = codeGenerator;
         this.properties = properties;
+        this.plans = plans;
         this.clock = clock;
     }
 
@@ -151,6 +155,11 @@ public class InvitationService {
         }
         if (invitation.isExhausted()) {
             throw new BusinessRuleException(INVITATION_EXHAUSTED, "La invitación ya no admite más usos.");
+        }
+        PlanLimits limits = plans.limits(household.getPlan());
+        if (!limits.allowsMembers(memberCount + 1)) {
+            throw new BusinessRuleException(HouseholdPlans.PLAN_MEMBER_LIMIT,
+                    "El hogar ya tiene " + memberCount + " miembros, el máximo de su plan. Pide al OWNER que lo pase a PREMIUM.");
         }
         invitation.registerUse();
         memberships.save(Membership.member(householdId, userId, now));

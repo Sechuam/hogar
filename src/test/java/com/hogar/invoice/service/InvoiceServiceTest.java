@@ -16,6 +16,8 @@ import static org.mockito.Mockito.when;
 import com.hogar.expense.dto.ExpenseDeletedEvent;
 import com.hogar.expense.dto.ExpenseRef;
 import com.hogar.expense.service.ExpenseQueries;
+import com.hogar.household.dto.PlanLimits;
+import com.hogar.household.service.HouseholdQueries;
 import com.hogar.invoice.config.InvoiceProperties;
 import com.hogar.invoice.domain.Invoice;
 import com.hogar.invoice.dto.InvoiceDownload;
@@ -78,6 +80,7 @@ class InvoiceServiceTest {
     private final InvoiceRepository invoices = mock(InvoiceRepository.class);
     private final MembershipGuard guard = mock(MembershipGuard.class);
     private final ExpenseQueries expenses = mock(ExpenseQueries.class);
+    private final HouseholdQueries households = mock(HouseholdQueries.class);
     private final PlatformTransactionManager transactionManager = mock(PlatformTransactionManager.class);
     private StorageService storage;
     private InvoiceService service;
@@ -85,12 +88,13 @@ class InvoiceServiceTest {
     @BeforeEach
     void setUp() {
         storage = spy(new LocalFileSystemStorage(storageDir));
-        service = new InvoiceService(invoices, guard, expenses, storage, new InvoiceFileCleanup(storage),
+        service = new InvoiceService(invoices, guard, expenses, households, storage, new InvoiceFileCleanup(storage),
                 new InvoiceProperties(DataSize.ofBytes(MAX_BYTES)), transactionManager,
                 Clock.fixed(NOW, ZoneOffset.UTC));
         when(invoices.saveAndFlush(any(Invoice.class))).thenAnswer(inv -> inv.getArgument(0));
         when(expenses.lockForModification(HOUSEHOLD, EXPENSE, USER)).thenReturn(ref());
         when(expenses.require(HOUSEHOLD, EXPENSE)).thenReturn(ref());
+        when(households.lockPlanUsage(HOUSEHOLD)).thenReturn(PlanLimits.UNLIMITED);
         TransactionSynchronizationManager.initSynchronization();
     }
 
@@ -229,6 +233,33 @@ class InvoiceServiceTest {
         complete(TransactionSynchronization.STATUS_ROLLED_BACK);
 
         assertThat(filesOnDisk()).isEmpty();
+    }
+
+    @Test
+    void invoiceThatDoesNotFitInThePlanIsRejectedAfterLockingTheExpenseAndTheFileIsDeletedOnRollback() {
+        long max = 100;
+        when(households.lockPlanUsage(HOUSEHOLD)).thenReturn(new PlanLimits(4, 1, max, 12));
+        when(invoices.sumSizeBytes(HOUSEHOLD)).thenReturn(max - PDF.length + 1);
+
+        assertCode(() -> service.upload(HOUSEHOLD, EXPENSE, USER, "f.pdf", new ByteArrayResource(PDF)),
+                "plan-storage-limit");
+        var order = inOrder(expenses, households);
+        order.verify(expenses).lockForModification(HOUSEHOLD, EXPENSE, USER);
+        order.verify(households).lockPlanUsage(HOUSEHOLD);
+        verify(invoices, never()).saveAndFlush(any());
+
+        complete(TransactionSynchronization.STATUS_ROLLED_BACK);
+        assertThat(filesOnDisk()).isEmpty();
+    }
+
+    @Test
+    void invoiceThatExactlyFillsThePlanIsAccepted() {
+        when(households.lockPlanUsage(HOUSEHOLD)).thenReturn(new PlanLimits(4, 1, 100L, 12));
+        when(invoices.sumSizeBytes(HOUSEHOLD)).thenReturn(100L - PDF.length);
+
+        service.upload(HOUSEHOLD, EXPENSE, USER, "f.pdf", new ByteArrayResource(PDF));
+
+        assertThat(savedInvoice().getSizeBytes()).isEqualTo(PDF.length);
     }
 
     @Test

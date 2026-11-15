@@ -2,6 +2,7 @@ package com.hogar.household.controller;
 
 import com.hogar.household.dto.CreateHouseholdRequest;
 import com.hogar.household.dto.HouseholdResponse;
+import com.hogar.household.dto.PlanResponse;
 import com.hogar.household.dto.UpdateHouseholdRequest;
 import com.hogar.household.service.HouseholdService;
 import com.hogar.shared.config.ApiDoc;
@@ -45,6 +46,7 @@ class HouseholdController {
     @ApiResponse(responseCode = "201", description = "Hogar creado.",
             headers = @Header(name = "Location", description = "URL del hogar creado", schema = @Schema(type = "string")))
     @ApiResponse(responseCode = "400", description = ApiDoc.VALIDATION_ERROR + ApiDoc.NL + ApiDoc.MALFORMED_BODY)
+    @ApiResponse(responseCode = "422", description = ApiDoc.PLAN_HOUSEHOLD_LIMIT)
     @PostMapping
     ResponseEntity<HouseholdResponse> create(@Valid @RequestBody CreateHouseholdRequest request) {
         HouseholdResponse created = households.create(currentUser.id(), request);
@@ -83,5 +85,17 @@ class HouseholdController {
     @PatchMapping("/{householdId}")
     HouseholdResponse update(@Parameter(description = "ID del hogar") @PathVariable UUID householdId, @Valid @RequestBody UpdateHouseholdRequest request) {
         return households.update(householdId, currentUser.id(), request);
+    }
+
+    @Operation(summary = "Consultar el plan del hogar",
+            description = "Plan (FREE o PREMIUM), sus límites (`null` = sin límite) y el uso actual: miembros, "
+                    + "espacio de facturas y primer día visible en los listados de gastos y liquidaciones. "
+                    + "El plan no se cambia por API: no hay pagos (D-068).")
+    @ApiResponse(responseCode = "200", description = "Plan, límites y uso.")
+    @ApiResponse(responseCode = "400", description = ApiDoc.BAD_PATH)
+    @ApiResponse(responseCode = "404", description = ApiDoc.HOUSEHOLD_NOT_FOUND)
+    @GetMapping("/{householdId}/plan")
+    PlanResponse plan(@Parameter(description = "ID del hogar") @PathVariable UUID householdId) {
+        return households.plan(householdId, currentUser.id());
     }
 }
