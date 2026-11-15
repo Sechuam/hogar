@@ -29,6 +29,19 @@ Authorization: Bearer {{anaToken}}
     client.test("listado 200", () => client.assert(response.status === 200, "status " + response.status));
 %}
 
+### Plan del hogar: FREE con sus límites y el uso actual -> 200 (D-068)
+GET {{baseUrl}}/api/households/{{householdId}}/plan
+Authorization: Bearer {{anaToken}}
+
+> {%
+    client.test("plan 200 FREE", () => {
+        client.assert(response.status === 200, "status " + response.status);
+        client.assert(response.body.plan === "FREE", "plan " + response.body.plan);
+        client.assert(response.body.limits.maxMembers === 4, "maxMembers " + response.body.limits.maxMembers);
+        client.assert(response.body.usage.members === 1, "members " + response.body.usage.members);
+    });
+%}
+
 ### Renombrar el hogar (solo OWNER) -> 200
 PATCH {{baseUrl}}/api/households/{{householdId}}
 Authorization: Bearer {{anaToken}}
