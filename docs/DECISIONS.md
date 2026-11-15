@@ -482,3 +482,14 @@ de household (inversión de dependencias: household no depende de invoice). Los 
 límites holgados; `PlanLimitsIT` arranca con los reales.
 **Alternativas:** limitar funciones (sin facturas en FREE) — más simple pero menos realista; tabla de
 planes en BD — prematuro sin pagos; contar hogares en el usuario — el plan es del hogar, no de la persona.
+
+## D-069 · CORS opcional por lista de orígenes exactos — Aceptada (Fase 8)
+**Contexto:** D-066 dejó CORS sin configurar porque el cliente previsto era nativo. El cliente Flutter
+también compila para web, que se usa en desarrollo (y quizá en producción) y llama a la API desde otro
+origen. **Decisión:** `hogar.cors.allowed-origins` (`CORS_ALLOWED_ORIGINS`), vacío por defecto (todo
+sigue como en D-066). Si se configura: solo orígenes exactos (`esquema://host[:puerto]`, se rechazan
+comodines y rutas al arrancar), solo bajo `/api/**`, sin credenciales (el token va en `Authorization`,
+no hay cookies que robar), cabeceras expuestas `Location`, `X-Request-Id`, `Retry-After` y
+`Content-Disposition`, y preflight cacheado 1 h.
+**Alternativas:** proxy de desarrollo delante de Flutter web (Flutter no trae uno y obliga a otro
+proceso); `allowedOriginPatterns` con comodines (demasiado amplio para una API con datos personales).

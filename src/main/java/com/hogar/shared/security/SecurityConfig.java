@@ -3,6 +3,9 @@ package com.hogar.shared.security;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hogar.shared.error.Problems;
 import java.net.URI;
+import java.time.Duration;
+import java.util.List;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -16,6 +19,8 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.AccessDeniedHandler;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 /**
  * API stateless autenticada con el access token propio (Bearer JWT, ver {@link JwtConfig}).
@@ -25,6 +30,7 @@ import org.springframework.security.web.access.AccessDeniedHandler;
  * servicios mediante {@link MembershipGuard}, porque depende del recurso concreto.
  */
 @Configuration(proxyBeanMethods = false)
+@EnableConfigurationProperties(CorsProperties.class)
 public class SecurityConfig {
 
     /**
@@ -46,8 +52,14 @@ public class SecurityConfig {
     };
 
     @Bean
-    SecurityFilterChain securityFilterChain(HttpSecurity http, ObjectMapper objectMapper) throws Exception {
+    SecurityFilterChain securityFilterChain(HttpSecurity http, ObjectMapper objectMapper, CorsProperties cors)
+            throws Exception {
         var entryPoint = new ProblemDetailAuthenticationEntryPoint(objectMapper);
+        if (cors.enabled()) {
+            http.cors(c -> c.configurationSource(corsSource(cors)));
+        } else {
+            http.cors(AbstractHttpConfigurer::disable);
+        }
         return http
                 .csrf(AbstractHttpConfigurer::disable)
                 .httpBasic(AbstractHttpConfigurer::disable)
@@ -65,6 +77,24 @@ public class SecurityConfig {
                         .authenticationEntryPoint(entryPoint)
                         .accessDeniedHandler(accessDeniedHandler(objectMapper)))
                 .build();
+    }
+
+    /**
+     * CORS solo para los orígenes configurados (p. ej. el cliente Flutter web en desarrollo). Sin
+     * credenciales: el token va en {@code Authorization}, no en cookies. Se exponen las cabeceras que
+     * el cliente necesita leer ({@code Location}, {@code X-Request-Id}, {@code Retry-After}).
+     */
+    static UrlBasedCorsConfigurationSource corsSource(CorsProperties cors) {
+        CorsConfiguration config = new CorsConfiguration();
+        config.setAllowedOrigins(cors.allowedOrigins());
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE"));
+        config.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Request-Id"));
+        config.setExposedHeaders(List.of("Location", "X-Request-Id", "Retry-After", "Content-Disposition"));
+        config.setAllowCredentials(false);
+        config.setMaxAge(Duration.ofHours(1));
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/api/**", config);
+        return source;
     }
 
     @Bean
