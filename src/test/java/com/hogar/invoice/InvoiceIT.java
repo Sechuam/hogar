@@ -1,6 +1,7 @@
 package com.hogar.invoice;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 
 import com.hogar.expense.FinanceApiSupport;
 import com.hogar.expense.dto.ExpenseResponse;
@@ -295,6 +296,27 @@ class InvoiceIT extends FinanceApiSupport {
         assertProblem(get(path, f.pablo()), HttpStatus.NOT_FOUND, "invoice-not-found");
         assertProblem(get(path + "/metadata", f.pablo()), HttpStatus.NOT_FOUND, "invoice-not-found");
         assertProblem(call(HttpMethod.DELETE, path, f.ana(), null), HttpStatus.NOT_FOUND, "invoice-not-found");
+    }
+
+    // --- El gasto indica si tiene factura ---
+
+    @Test
+    void expenseReportsWhetherItHasAnInvoiceInListAndDetail() {
+        Flat f = flat();
+        ExpenseResponse without = createExpense(f.luis(), f.id(), expense("10.00", MARCH, null));
+        assertThat(without.hasInvoice()).isFalse();
+
+        upload(f.luis(), f.id(), f.expenseId(), "f.pdf", "application/pdf", pdf());
+
+        assertThat(getExpense(f.pablo(), f.id(), f.expenseId()).hasInvoice()).isTrue();
+        assertThat(listExpenses(f.pablo(), f.id(), "").content())
+                .extracting(ExpenseResponse::id, ExpenseResponse::hasInvoice)
+                .containsExactlyInAnyOrder(
+                        tuple(f.expenseId(), true),
+                        tuple(without.id(), false));
+
+        call(HttpMethod.DELETE, invoicePath(f.id(), f.expenseId()), f.eva(), null);
+        assertThat(getExpense(f.pablo(), f.id(), f.expenseId()).hasInvoice()).isFalse();
     }
 
     // --- Consistencia BD ↔ disco ---

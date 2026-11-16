@@ -46,7 +46,10 @@ public record ExpenseResponse(
         @Schema(description = "Alta (UTC).", example = "2026-03-15T09:30:00Z")
         Instant createdAt,
         @Schema(description = "Última modificación (UTC).", example = "2026-03-15T09:30:00Z")
-        Instant updatedAt) {
+        Instant updatedAt,
+        @Schema(description = "Si tiene factura adjunta (opcional; se gestiona en /expenses/{id}/invoice).",
+                example = "true")
+        boolean hasInvoice) {
 
     /**
      * @param weight base del reparto: ingreso del mes en PROPORTIONAL, 1 en EQUAL

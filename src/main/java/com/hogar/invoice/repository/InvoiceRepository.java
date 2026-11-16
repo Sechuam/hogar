@@ -1,6 +1,8 @@
 package com.hogar.invoice.repository;
 
 import com.hogar.invoice.domain.Invoice;
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -16,6 +18,10 @@ public interface InvoiceRepository extends JpaRepository<Invoice, UUID> {
     Optional<Invoice> findByExpenseId(UUID expenseId);
 
     boolean existsByExpenseId(UUID expenseId);
+
+    /** De los gastos indicados, los que tienen factura (usa el índice único de {@code expense_id}). */
+    @Query("select i.expenseId from Invoice i where i.expenseId in :expenseIds")
+    List<UUID> findExpenseIdsWithInvoice(Collection<UUID> expenseIds);
 
     /** Bytes ocupados por las facturas del hogar (0 si no tiene). */
     @Query("select coalesce(sum(i.sizeBytes), 0) from Invoice i where i.householdId = :householdId")

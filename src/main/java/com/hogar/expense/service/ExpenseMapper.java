@@ -13,7 +13,7 @@ final class ExpenseMapper {
     }
 
     /** Las {@code warnings} salen del {@code split_fallback} persistido: también aparecen al consultar. */
-    static ExpenseResponse toResponse(SharedExpense expense) {
+    static ExpenseResponse toResponse(SharedExpense expense, boolean hasInvoice) {
         List<ShareResponse> shares = expense.getShares().stream().map(ExpenseMapper::toShare).toList();
         List<String> warnings = expense.isSplitFallback()
                 ? List.of(SplitWarning.PROPORTIONAL_FALLBACK_NO_INCOME.name())
@@ -21,7 +21,7 @@ final class ExpenseMapper {
         return new ExpenseResponse(expense.getId(), expense.getAmount(), expense.getCurrency(),
                 expense.getDescription(), expense.getCategory(), expense.getExpenseDate(), expense.getPaidBy(),
                 expense.getCreatedBy(), expense.getSplitPolicyApplied(), shares, warnings, expense.getCreatedAt(),
-                expense.getUpdatedAt());
+                expense.getUpdatedAt(), hasInvoice);
     }
 
     private static ShareResponse toShare(ExpenseShare share) {

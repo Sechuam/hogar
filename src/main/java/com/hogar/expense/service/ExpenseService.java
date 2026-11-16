@@ -25,8 +25,10 @@ import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -48,15 +50,18 @@ public class ExpenseService {
     private final MembershipGuard guard;
     private final HouseholdQueries households;
     private final IncomeQueries incomes;
+    private final ExpenseInvoices invoices;
     private final ApplicationEventPublisher events;
     private final Clock clock;
 
     ExpenseService(SharedExpenseRepository expenses, MembershipGuard guard, HouseholdQueries households,
-                   IncomeQueries incomes, ApplicationEventPublisher events, Clock clock) {
+                   IncomeQueries incomes, ExpenseInvoices invoices, ApplicationEventPublisher events,
+                   Clock clock) {
         this.expenses = expenses;
         this.guard = guard;
         this.households = households;
         this.incomes = incomes;
+        this.invoices = invoices;
         this.events = events;
         this.clock = clock;
     }
@@ -71,7 +76,8 @@ public class ExpenseService {
         SplitResult split = split(info, request.amount(), request.date());
         SharedExpense expense = SharedExpense.create(householdId, payer, userId, request.amount(), info.currency(),
                 request.description(), request.category(), request.date(), split, Instant.now(clock));
-        return ExpenseMapper.toResponse(expenses.save(expense));
+        // Un gasto recién creado aún no puede tener factura (se sube después, a su id).
+        return ExpenseMapper.toResponse(expenses.save(expense), false);
     }
 
     /**
@@ -89,14 +95,17 @@ public class ExpenseService {
         }
         // Plan FREE: solo los últimos meses (D-068); los balances sí usan todo el histórico.
         LocalDate from = households.planLimits(householdId).visibleFrom(fromOrNull, LocalDate.now(clock));
-        return PageResponse.of(expenses.search(householdId, from, toOrNull, categoryOrNull, paidByOrNull,
-                PageRequest.of(page, size)), ExpenseMapper::toResponse);
+        Page<SharedExpense> found = expenses.search(householdId, from, toOrNull, categoryOrNull, paidByOrNull,
+                PageRequest.of(page, size));
+        // Una consulta para toda la página, no una por gasto.
+        Set<UUID> withInvoice = invoices.withInvoice(found.map(SharedExpense::getId).getContent());
+        return PageResponse.of(found, e -> ExpenseMapper.toResponse(e, withInvoice.contains(e.getId())));
     }
 
     @Transactional(readOnly = true)
     public ExpenseResponse get(UUID householdId, UUID userId, UUID expenseId) {
         guard.requireMember(householdId, userId);
-        return ExpenseMapper.toResponse(load(householdId, expenseId));
+        return withInvoiceFlag(load(householdId, expenseId));
     }
 
     /**
@@ -127,7 +136,11 @@ public class ExpenseService {
             expense.changeAmountDatePayer(request.amount(), request.date(), payer, now);
             expense.replaceShares(split(info, request.amount(), request.date()), now);
         }
-        return ExpenseMapper.toResponse(expense);
+        return withInvoiceFlag(expense);
+    }
+
+    private ExpenseResponse withInvoiceFlag(SharedExpense expense) {
+        return ExpenseMapper.toResponse(expense, !invoices.withInvoice(Set.of(expense.getId())).isEmpty());
     }
 
     /**

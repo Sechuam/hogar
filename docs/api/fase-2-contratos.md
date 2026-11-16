@@ -71,6 +71,7 @@ Todos bajo `/api/households/{householdId}` y autenticados. No miembro → 404 `h
 - PROPORTIONAL usa `IncomeQueries.monthlyIncomeByUser(householdId, YearMonth.from(date))`;
   los miembros sin ingresos ese mes participan con 0.
 - `warnings` en la respuesta se derivan de `split_fallback` (persistido), así que también aparecen al consultar.
+- `hasInvoice` indica si el gasto tiene factura adjunta (opcional, D-070); al crear siempre es `false`.
 - Cambiar la `splitPolicy` del hogar o los ingresos **no** modifica gastos existentes (snapshot).
 
 ## 4. Aclaraciones tras QA
