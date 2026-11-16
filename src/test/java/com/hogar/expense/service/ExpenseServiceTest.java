@@ -44,6 +44,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.BeforeEach;
@@ -69,6 +70,8 @@ class ExpenseServiceTest {
     private HouseholdQueries households;
     @Mock
     private IncomeQueries incomes;
+    @Mock
+    private ExpenseInvoices invoices;
 
     private ExpenseService service;
     private final UUID householdId = UUID.randomUUID();
@@ -79,7 +82,8 @@ class ExpenseServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new ExpenseService(expenses, guard, households, incomes, event -> { }, Clock.fixed(NOW, ZoneOffset.UTC));
+        service = new ExpenseService(expenses, guard, households, incomes, invoices, event -> { },
+                Clock.fixed(NOW, ZoneOffset.UTC));
         lenient().when(expenses.save(any(SharedExpense.class))).thenAnswer(inv -> inv.getArgument(0));
     }
 
@@ -232,6 +236,34 @@ class ExpenseServiceTest {
         assertThat(page.content()).extracting(ExpenseResponse::id).containsExactly(expense.getId());
         assertThat(page.page()).isEqualTo(2);
         assertThat(page.totalPages()).isEqualTo(3);
+    }
+
+    @Test
+    void listMarksTheExpensesWithInvoiceWithOneLookupForThePage() {
+        SharedExpense withTicket = existing(ana, ana);
+        SharedExpense withoutTicket = existing(luis, luis);
+        when(households.planLimits(householdId)).thenReturn(PlanLimits.UNLIMITED);
+        when(expenses.search(any(), any(), any(), any(), any(), any()))
+                .thenReturn(new PageImpl<>(List.of(withTicket, withoutTicket)));
+        when(invoices.withInvoice(List.of(withTicket.getId(), withoutTicket.getId())))
+                .thenReturn(Set.of(withTicket.getId()));
+
+        PageResponse<ExpenseResponse> page = service.list(householdId, ana, null, null, null, null, 0, 20);
+
+        assertThat(page.content()).extracting(ExpenseResponse::hasInvoice).containsExactly(true, false);
+        verify(invoices, times(1)).withInvoice(any());
+    }
+
+    @Test
+    void getAndCreateReportWhetherTheExpenseHasAnInvoice() {
+        SharedExpense expense = existing(luis, luis);
+        when(invoices.withInvoice(Set.of(expense.getId()))).thenReturn(Set.of(expense.getId()));
+
+        assertThat(service.get(householdId, eva, expense.getId()).hasInvoice()).isTrue();
+
+        household(SplitPolicy.EQUAL, ana, luis);
+        ExpenseResponse created = service.create(householdId, ana, request("30.00", null));
+        assertThat(created.hasInvoice()).isFalse();
     }
 
     @Test

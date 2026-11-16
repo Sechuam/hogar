@@ -493,3 +493,17 @@ no hay cookies que robar), cabeceras expuestas `Location`, `X-Request-Id`, `Retr
 `Content-Disposition`, y preflight cacheado 1 h.
 **Alternativas:** proxy de desarrollo delante de Flutter web (Flutter no trae uno y obliga a otro
 proceso); `allowedOriginPatterns` con comodines (demasiado amplio para una API con datos personales).
+
+## D-070 · El gasto indica si tiene factura (`hasInvoice`) — Aceptada (tras Fase 8)
+**Contexto:** el cliente quiere marcar en la lista qué gastos tienen factura, que es opcional y sirve
+para dar confianza entre quienes conviven. Preguntarlo gasto a gasto serían N peticiones por página.
+**Decisión:** `ExpenseResponse.hasInvoice`. Expense define el puerto `ExpenseInvoices` y lo implementa
+invoice (igual que `HouseholdStorageUsage`, D-068), así que la dependencia sigue siendo invoice →
+expense. En el listado se resuelve con **una** consulta por página (`expense_id in (...)`, cubierta por el
+índice único `uk_invoices_expense`); al crear es siempre `false`.
+**Alternativas:** `LEFT JOIN` a `invoices` en la consulta de gastos (expense tendría que conocer la tabla
+o la entidad de otra feature, contra las reglas de ArchUnit); un campo desnormalizado en `shared_expenses`
+(migración y dos sitios que mantener a la par).
+**Consecuencias:** una consulta más por página o detalle de gasto. El campo se añade al final del record,
+así que los clientes que lo ignoran no se ven afectados.
+

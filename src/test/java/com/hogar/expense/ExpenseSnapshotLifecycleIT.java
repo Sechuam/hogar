@@ -31,7 +31,8 @@ class ExpenseSnapshotLifecycleIT extends FinanceApiSupport {
 
     private ExpenseResponse withoutTimestamps(ExpenseResponse e) {
         return new ExpenseResponse(e.id(), e.amount(), e.currency(), e.description(), e.category(), e.date(),
-                e.paidBy(), e.createdBy(), e.splitPolicyApplied(), e.shares(), e.warnings(), null, null);
+                e.paidBy(), e.createdBy(), e.splitPolicyApplied(), e.shares(), e.warnings(), null, null,
+                e.hasInvoice());
     }
 
     private void assertUnchanged(TestUser reader, UUID householdId, ExpenseResponse before) {
